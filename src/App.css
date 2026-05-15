@@ -43,10 +43,20 @@ h1 {
   color: var(--text-muted);
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
+.tabs {
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.tab-button {
+  border-color: #5a1313;
+  background: #130a0a;
+}
+
+.tab-button.active {
+  border-color: var(--accent-bright);
+  background: #291010;
 }
 
 .panel {
@@ -166,7 +176,11 @@ button.deny {
 }
 
 @media (max-width: 880px) {
-  .grid {
-    grid-template-columns: 1fr;
+  .tabs {
+    flex-wrap: wrap;
+  }
+
+  .tab-button {
+    flex: 1 1 160px;
   }
 }

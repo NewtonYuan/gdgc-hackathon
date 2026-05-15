@@ -1,12 +1,7 @@
 import { useState } from 'react'
 import './App.css'
-
-type RecordEntry = {
-  name: string
-  role: string
-  district: string
-  status: 'Verified' | 'Missing' | 'Corrupted'
-}
+import DatabaseTab, { type RecordEntry } from './components/DatabaseTab'
+import NpcTab from './components/NpcTab'
 
 const DATABASE: RecordEntry[] = [
   { name: 'Sarah Chen', role: 'Nurse', district: 'Sector 4', status: 'Verified' },
@@ -23,6 +18,7 @@ const incomingClaim = {
 
 function App() {
   const [decision, setDecision] = useState<'VERIFY' | 'DENY' | null>(null)
+  const [activeTab, setActiveTab] = useState<'database' | 'npc'>('database')
 
   const match = DATABASE.find((entry) => entry.name === incomingClaim.name)
 
@@ -63,64 +59,32 @@ function App() {
         <p className="tagline">The database remembers fragments. You decide what survives.</p>
       </header>
 
-      <section className="grid">
-        <article className="panel">
-          <h2>Database Snapshot</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Role</th>
-                <th>District</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {DATABASE.map((row) => (
-                <tr key={row.name}>
-                  <td>{row.name}</td>
-                  <td>{row.role}</td>
-                  <td>{row.district}</td>
-                  <td className={row.status.toLowerCase()}>{row.status}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </article>
+      <div className="tabs" role="tablist" aria-label="Terminal panels">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'database'}
+          className={`tab-button ${activeTab === 'database' ? 'active' : ''}`}
+          onClick={() => setActiveTab('database')}
+        >
+          Database
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'npc'}
+          className={`tab-button ${activeTab === 'npc' ? 'active' : ''}`}
+          onClick={() => setActiveTab('npc')}
+        >
+          Incoming NPC
+        </button>
+      </div>
 
-        <article className="panel">
-          <h2>Incoming NPC Claim</h2>
-          <blockquote>{incomingClaim.statement}</blockquote>
-          <div className="facts">
-            <p>
-              <span>Name:</span> {incomingClaim.name}
-            </p>
-            <p>
-              <span>Role:</span> {incomingClaim.role}
-            </p>
-            <p>
-              <span>District:</span> {incomingClaim.district}
-            </p>
-          </div>
-
-          <div className="actions">
-            <button type="button" className="verify" onClick={() => setDecision('VERIFY')}>
-              VERIFY
-            </button>
-            <button type="button" className="deny" onClick={() => setDecision('DENY')}>
-              DENY
-            </button>
-          </div>
-
-          {decision && (
-            <p className={`result ${decision === (analysis.shouldVerify ? 'VERIFY' : 'DENY') ? 'correct' : 'wrong'}`}>
-              Decision: {decision} // {decision === (analysis.shouldVerify ? 'VERIFY' : 'DENY') ? 'CORRECT' : 'INCORRECT'}
-              <br />
-              <span>{analysis.reason}</span>
-            </p>
-          )}
-        </article>
-      </section>
+      {activeTab === 'database' ? (
+        <DatabaseTab database={DATABASE} />
+      ) : (
+        <NpcTab incomingClaim={incomingClaim} decision={decision} setDecision={setDecision} analysis={analysis} />
+      )}
     </main>
   )
 }
