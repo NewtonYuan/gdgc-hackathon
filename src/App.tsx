@@ -1,13 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 import DatabaseTab, { type RecordEntry } from './components/DatabaseTab'
 import NpcTab from './components/NpcTab'
-
-const DATABASE: RecordEntry[] = [
-  { name: 'Sarah Chen', role: 'Nurse', district: 'Sector 4', status: 'Verified' },
-  { name: 'Marcus Hale', role: 'Engineer', district: 'Sector 2', status: 'Missing' },
-  { name: 'Lina Torres', role: 'Security', district: '???', status: 'Corrupted' },
-]
+import { fetchRecords } from './lib/sqlite'
 
 const incomingClaim = {
   name: 'Marcus Hale',
@@ -19,10 +14,40 @@ const incomingClaim = {
 function App() {
   const [decision, setDecision] = useState<'VERIFY' | 'DENY' | null>(null)
   const [activeTab, setActiveTab] = useState<'database' | 'npc'>('database')
+  const [database, setDatabase] = useState<RecordEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
-  const match = DATABASE.find((entry) => entry.name === incomingClaim.name)
+  useEffect(() => {
+    let active = true
 
-  const analysis = (() => {
+    fetchRecords()
+      .then((rows) => {
+        if (!active) {
+          return
+        }
+        setDatabase(rows)
+      })
+      .catch((error: unknown) => {
+        if (!active) {
+          return
+        }
+        setLoadError(error instanceof Error ? error.message : 'Unknown SQLite error')
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const analysis = useMemo(() => {
+    const match = database.find((entry) => entry.name === incomingClaim.name)
+
     if (!match) {
       return {
         shouldVerify: false,
@@ -47,7 +72,7 @@ function App() {
       shouldVerify: false,
       reason: 'Fragments conflict or are too damaged to trust this claim.',
     }
-  })()
+  }, [database])
 
   return (
     <main className="terminal-shell">
@@ -80,8 +105,18 @@ function App() {
         </button>
       </div>
 
-      {activeTab === 'database' ? (
-        <DatabaseTab database={DATABASE} />
+      {loading ? (
+        <article className="panel" role="status" aria-live="polite">
+          <h2>Loading Database</h2>
+          <p className="tagline">Initializing SQLite records...</p>
+        </article>
+      ) : loadError ? (
+        <article className="panel" role="alert">
+          <h2>Database Error</h2>
+          <p className="tagline">{loadError}</p>
+        </article>
+      ) : activeTab === 'database' ? (
+        <DatabaseTab database={database} />
       ) : (
         <NpcTab incomingClaim={incomingClaim} decision={decision} setDecision={setDecision} analysis={analysis} />
       )}
