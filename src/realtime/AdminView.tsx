@@ -44,6 +44,7 @@ async function fetchJsonOrThrow<T>(url: string, init?: RequestInit): Promise<T> 
 
 export default function AdminView() {
   const [selectedId, setSelectedId] = useState<string | null>(() => readSelectedIdFromUrl())
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'verified' | 'invalid'>('all')
   const [rows, setRows] = useState<SubmissionSummary[]>([])
   const [detail, setDetail] = useState<SubmissionDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -167,6 +168,10 @@ export default function AdminView() {
     accepted: rows.filter((r) => r.decision === 'verified').length,
     declined: rows.filter((r) => r.decision === 'invalid').length,
   }
+  const filteredRows = statusFilter === 'all' ? rows : rows.filter((r) => r.decision === statusFilter)
+  const pieVerified = stats.total === 0 ? 0 : Math.round((stats.accepted / stats.total) * 360)
+  const piePending = stats.total === 0 ? 0 : Math.round((stats.pending / stats.total) * 360)
+  const pieInvalid = Math.max(0, 360 - pieVerified - piePending)
 
   const deleteSubmission = async () => {
     if (!detail) {
@@ -198,7 +203,7 @@ export default function AdminView() {
 
   if (loading) {
     return (
-      <AdminLayout active="submissions" stats={stats}>
+      <AdminLayout active="submissions">
         <article className="panel">
           <h2>Loading Admin View...</h2>
         </article>
@@ -207,10 +212,46 @@ export default function AdminView() {
   }
 
   return (
-    <AdminLayout active="submissions" stats={stats}>
-      <header className="topbar">
-        <h1>Submissions</h1>
-      </header>
+    <AdminLayout active="submissions">
+      <section className="admin-page-shell">
+        <section className="admin-header-grid">
+          <div className="admin-header-left">
+            <div className="admin-breadcrumbs">Dashboard &gt; Submissions</div>
+            <header className="admin-page-head">
+              <h1>Submissions</h1>
+            </header>
+            <div className="panel admin-toolbar">
+              <label className="admin-field">
+                <span>Status</span>
+                <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | 'pending' | 'verified' | 'invalid')}>
+                  <option value="all">All</option>
+                  <option value="pending">Pending</option>
+                  <option value="verified">Verified</option>
+                  <option value="invalid">Invalid</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <aside className="panel admin-summary-card">
+            <h3>Submission Summary</h3>
+            <div className="admin-summary-card-body">
+              <div
+                className="admin-pie"
+                aria-label="Submissions by status"
+                style={{
+                  background: `conic-gradient(#2f9f49 0deg ${pieVerified}deg, #dfb463 ${pieVerified}deg ${pieVerified + piePending}deg, #e12b2b ${pieVerified + piePending}deg ${pieVerified + piePending + pieInvalid}deg)`,
+                }}
+              />
+              <ul className="admin-legend">
+                <li><span className="dot verified-dot" />Verified: {stats.accepted}</li>
+                <li><span className="dot pending-dot" />Pending: {stats.pending}</li>
+                <li><span className="dot invalid-dot" />Invalid: {stats.declined}</li>
+                <li><span className="dot total-dot" />Total: {stats.total}</li>
+              </ul>
+            </div>
+          </aside>
+        </section>
+      </section>
 
       {error && (
         <article className="panel">
@@ -219,7 +260,7 @@ export default function AdminView() {
       )}
 
       {!selectedId ? (
-        <article className="panel">
+        <article className="panel admin-table-panel">
           <div className="admin-table-wrap">
             <table>
               <thead>
@@ -233,12 +274,12 @@ export default function AdminView() {
                 </tr>
               </thead>
               <tbody>
-                {rows.length === 0 ? (
+                {filteredRows.length === 0 ? (
                   <tr>
                     <td colSpan={6}>No submissions yet.</td>
                   </tr>
                 ) : (
-                  rows.map((row) => (
+                  filteredRows.map((row) => (
                     <tr key={row.id}>
                       <td>{row.name}</td>
                       <td>{row.phone}</td>

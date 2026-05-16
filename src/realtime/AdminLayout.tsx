@@ -3,15 +3,9 @@ import type { ReactNode } from 'react'
 type AdminLayoutProps = {
   active: 'submissions' | 'desktop'
   children: ReactNode
-  stats?: {
-    total: number
-    pending: number
-    accepted: number
-    declined: number
-  }
 }
 
-export default function AdminLayout({ active, children, stats }: AdminLayoutProps) {
+export default function AdminLayout({ active, children }: AdminLayoutProps) {
   return (
     <main className="admin-shell">
       <div className="admin-layout">
@@ -38,15 +32,6 @@ export default function AdminLayout({ active, children, stats }: AdminLayoutProp
               Desktop View
             </button>
           </nav>
-
-          {stats && (
-            <div className="admin-stats">
-              <p><span>Total</span> {stats.total}</p>
-              <p><span>Pending</span> {stats.pending}</p>
-              <p><span>Accepted</span> {stats.accepted}</p>
-              <p><span>Declined</span> {stats.declined}</p>
-            </div>
-          )}
 
           <div className="actions">
             <button type="button" onClick={() => window.location.assign('/')}>Back</button>
