@@ -1,3 +1,90 @@
+.boot-screen {
+  position: relative;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  overflow: hidden;
+}
+
+.start-screen .start-button {
+  position: relative;
+  z-index: 2;
+}
+
+.caution-tape {
+  position: absolute;
+  left: -30%;
+  width: 160%;
+  height: 52px;
+  background: repeating-linear-gradient(
+    -45deg,
+    #f2c400 0 22px,
+    #0b0b0b 22px 44px
+  );
+  border-top: 2px solid #7d6200;
+  border-bottom: 2px solid #7d6200;
+  z-index: 1;
+}
+
+.tape-one {
+  top: 30%;
+  transform: rotate(-18deg);
+}
+
+.tape-two {
+  top: 62%;
+  transform: rotate(-18deg);
+}
+
+.boot-panel {
+  width: min(560px, 100%);
+  border: 2px solid var(--border);
+  border-radius: 0;
+  padding: 1.2rem;
+  background: linear-gradient(180deg, rgba(161, 22, 22, 0.12), transparent 30%), var(--panel);
+  box-shadow: 6px 6px 0 #250707;
+}
+
+.start-panel {
+  display: grid;
+  place-items: center;
+  min-height: 160px;
+}
+
+.start-button {
+  min-width: 320px;
+  min-height: 90px;
+  font-size: 1.4rem;
+}
+
+.boot-label {
+  margin: 0 0 0.6rem;
+  color: #f2f2f2;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.boot-bar-track {
+  width: 100%;
+  height: 16px;
+  border: 2px solid #511212;
+  border-radius: 0;
+  background: #0e0a0a;
+  overflow: hidden;
+}
+
+.boot-bar-fill {
+  height: 100%;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      #7d1111 0 8px,
+      #e12b2b 8px 16px
+    );
+  transition: width 90ms linear;
+}
+
 .terminal-shell {
   position: relative;
   max-width: 1080px;
@@ -50,21 +137,26 @@ h1 {
 }
 
 .tab-button {
+  border-width: 2px;
+  border-radius: 0;
   border-color: #5a1313;
   background: #130a0a;
+  box-shadow: 3px 3px 0 #240707;
 }
 
 .tab-button.active {
   border-color: var(--accent-bright);
   background: #291010;
+  transform: translate(1px, 1px);
+  box-shadow: 2px 2px 0 #240707;
 }
 
 .panel {
   background: linear-gradient(180deg, rgba(161, 22, 22, 0.08), transparent 22%), var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: 2px solid var(--border);
+  border-radius: 0;
   padding: 1rem;
-  box-shadow: 0 0 24px rgba(161, 22, 22, 0.12);
+  box-shadow: 6px 6px 0 #250707;
 }
 
 h2 {
@@ -128,19 +220,25 @@ blockquote {
 }
 
 button {
-  border: 1px solid var(--accent);
+  border: 2px solid var(--accent);
   background: #1a0a0a;
   color: #efefef;
   padding: 0.55rem 0.9rem;
-  border-radius: 6px;
+  border-radius: 0;
   cursor: pointer;
   font-family: inherit;
   font-weight: 700;
   letter-spacing: 0.04em;
+  box-shadow: 3px 3px 0 #240707;
 }
 
 button:hover {
   background: #260d0d;
+}
+
+button:active {
+  transform: translate(1px, 1px);
+  box-shadow: 2px 2px 0 #240707;
 }
 
 button.verify {
@@ -154,7 +252,7 @@ button.deny {
 .result {
   margin: 1rem 0 0;
   padding: 0.7rem;
-  border-radius: 6px;
+  border-radius: 0;
   font-weight: 700;
 }
 
@@ -166,12 +264,12 @@ button.deny {
 }
 
 .result.correct {
-  border: 1px solid #2f9f49;
+  border: 2px solid #2f9f49;
   background: rgba(47, 159, 73, 0.12);
 }
 
 .result.wrong {
-  border: 1px solid var(--accent-bright);
+  border: 2px solid var(--accent-bright);
   background: rgba(225, 43, 43, 0.14);
 }
 
