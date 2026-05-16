@@ -39,8 +39,10 @@ function App() {
 function LandingView() {
   return (
     <main className="boot-screen start-screen">
-      <div className="caution-tape tape-one" aria-hidden="true" />
-      <div className="caution-tape tape-two" aria-hidden="true" />
+      <div className="landing-brand">
+        <img src="/icons/logo.svg" alt="App logo" className="app-logo" />
+        <span>records.io</span>
+      </div>
       <div className="start-actions">
         <a className="start-button button" href="/upload">
           UPLOAD
