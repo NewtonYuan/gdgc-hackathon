@@ -52,27 +52,36 @@ function buildNodePositions(nodes: GraphNodeData[]): PositionedNode[] {
 
     return {
       ...node,
-      position: [
-        Math.cos(angle) * radius,
-        y,
-        Math.sin(angle) * radius,
-      ],
+      position: [Math.cos(angle) * radius, y, Math.sin(angle) * radius],
     }
   })
 }
 
+function connectionVisuals(weight: number) {
+  const normalized = Math.min(Math.max(weight, 0), 100) / 100
+  const emphasis = normalized ** 1.7
+
+  return {
+    color: normalized >= 0.75 ? '#ffffff' : normalized >= 0.45 ? '#b8f3ff' : '#4aa8d8',
+    lineWidth: 0.55 + emphasis * 8.5,
+    opacity: 0.24 + normalized * 0.68,
+  }
+}
+
 function SpaceNode({ node }: { node: PositionedNode }) {
+  const bodyRef = useRef<THREE.Group>(null)
   const meshRef = useRef<THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>>(null)
+  const sparkMaterialRef = useRef<THREE.PointsMaterial>(null)
   const sparkRef = useRef<THREE.Points>(null)
   const statusStyle = STATUS_STYLES[node.statusBucket]
   const sparkGeometry = useMemo(() => {
     const positions: number[] = []
-    const particleCount = 34
+    const particleCount = 72
 
     for (let index = 0; index < particleCount; index += 1) {
       const theta = seededValue(node.id, index) * Math.PI * 2
       const phi = Math.acos(2 * seededValue(node.id, index + particleCount) - 1)
-      const radius = 0.48 + seededValue(node.id, index + particleCount * 2) * 0.42
+      const radius = 0.356 + seededValue(node.id, index + particleCount * 2) * 0.012
 
       positions.push(
         Math.sin(phi) * Math.cos(theta) * radius,
@@ -89,54 +98,59 @@ function SpaceNode({ node }: { node: PositionedNode }) {
   useFrame((state) => {
     const pulse = 1 + Math.sin(state.clock.elapsedTime * 2.3 + node.position[2]) * 0.12
 
+    if (bodyRef.current) {
+      bodyRef.current.rotation.y = state.clock.elapsedTime * 0.28
+      bodyRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 0.42 + node.position[0]) * 0.08
+      bodyRef.current.scale.setScalar(pulse)
+      bodyRef.current.position.y = Math.sin(state.clock.elapsedTime + node.position[0]) * 0.05
+    }
+
     if (meshRef.current) {
-      meshRef.current.rotation.y = state.clock.elapsedTime * 0.28
-      meshRef.current.scale.setScalar(pulse)
-      meshRef.current.position.y = node.position[1] + Math.sin(state.clock.elapsedTime + node.position[0]) * 0.05
       meshRef.current.material.emissiveIntensity = 0.75 + pulse * 0.42
     }
 
-    if (sparkRef.current) {
-      sparkRef.current.rotation.y = state.clock.elapsedTime * 0.22
-      sparkRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 0.45 + node.position[0]) * 0.16
-      const sparkPulse = 1 + Math.sin(state.clock.elapsedTime * 2.8 + node.position[0]) * 0.08
-      sparkRef.current.scale.setScalar(sparkPulse)
+    if (sparkMaterialRef.current) {
+      sparkMaterialRef.current.opacity = 0.48 + Math.sin(state.clock.elapsedTime * 3.1 + node.position[0]) * 0.18
     }
   })
 
   return (
     <group position={node.position}>
-      <points ref={sparkRef} geometry={sparkGeometry}>
-        <pointsMaterial
-          color={statusStyle.color}
-          size={0.045}
-          transparent
-          opacity={0.82}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-        />
-      </points>
-      <mesh ref={meshRef}>
-        <sphereGeometry args={[0.34, 48, 48]} />
-        <meshStandardMaterial
-          color={statusStyle.color}
-          emissive={statusStyle.emissive}
-          emissiveIntensity={1.05}
-          roughness={0.34}
-          metalness={0.12}
-        />
-      </mesh>
+      <group ref={bodyRef}>
+        <mesh ref={meshRef}>
+          <sphereGeometry args={[0.34, 48, 48]} />
+          <meshStandardMaterial
+            color={statusStyle.color}
+            emissive={statusStyle.emissive}
+            emissiveIntensity={1.05}
+            roughness={0.34}
+            metalness={0.12}
+          />
+        </mesh>
+        <points ref={sparkRef} geometry={sparkGeometry}>
+          <pointsMaterial
+            ref={sparkMaterialRef}
+            color="#fff6d2"
+            size={0.022}
+            transparent
+            opacity={0.62}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+            sizeAttenuation
+          />
+        </points>
+      </group>
       <Text
         position={[0, -0.72, 0]}
-        fontSize={0.16}
-        maxWidth={1.9}
+        fontSize={0.14}
+        maxWidth={2.3}
         anchorX="center"
         anchorY="middle"
         color={statusStyle.label}
         outlineWidth={0.018}
         outlineColor="#020612"
       >
-        {node.label}
+        {node.person.name}
       </Text>
     </group>
   )
@@ -162,7 +176,7 @@ function GraphScene({ database }: GraphTabProps) {
         {edges.map((edge) => {
           const source = positionById.get(edge.source)
           const target = positionById.get(edge.target)
-          const strength = Math.min(edge.weight, 4)
+          const visual = connectionVisuals(edge.overlapScore)
 
           if (!source || !target) {
             return null
@@ -172,10 +186,10 @@ function GraphScene({ database }: GraphTabProps) {
             <Line
               key={edge.id}
               points={[source, target]}
-              color={strength >= 3 ? '#b8f3ff' : '#62d7ff'}
-              lineWidth={0.7 + strength * 0.9}
+              color={visual.color}
+              lineWidth={visual.lineWidth}
               transparent
-              opacity={0.26 + strength * 0.13}
+              opacity={visual.opacity}
             />
           )
         })}
@@ -248,7 +262,7 @@ function GraphTab({ database }: GraphTabProps) {
           <span>Color rule</span> Verified records glow green, unresolved records glow amber, corrupted records glow red.
         </p>
         <p>
-          <span>Control rule</span> Drag to rotate the star map. Scroll to zoom between record clusters.
+          <span>Connection rule</span> Role, district, and status overlap increase line thickness.
         </p>
       </div>
     </article>
