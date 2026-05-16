@@ -16,6 +16,39 @@ type SubmissionDetail = SubmissionSummary & {
   cardPayload: string;
   documentPath: string | null;
   decidedAt: string | null;
+  age: number | null;
+  gender: string | null;
+  trustScore: number;
+  employment: {
+    jobTitle: string;
+    employer: string;
+    workAddress: string;
+  } | null;
+  student: {
+    institution: string;
+    studentId: string;
+    fieldOfStudy: string;
+    yearOfStudy: number | null;
+  } | null;
+  retired: {
+    formerOccupation: string;
+  } | null;
+};
+
+type ProfileConnection = {
+  profileId: string;
+  cardId: string;
+  name: string;
+  verificationStatus: string;
+  trustScore: number;
+  status: "auto_linked" | "suggested";
+  confidence: number;
+  matchBreakdown: Record<string, number>;
+};
+
+type ProfileConnections = {
+  autoLinked: ProfileConnection[];
+  suggested: ProfileConnection[];
 };
 
 function readSelectedIdFromUrl(): string | null {
@@ -58,6 +91,11 @@ export default function AdminView() {
   const [detail, setDetail] = useState<SubmissionDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [connections, setConnections] = useState<ProfileConnections>({
+    autoLinked: [],
+    suggested: [],
+  });
+  const [connectionsError, setConnectionsError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -142,6 +180,57 @@ export default function AdminView() {
     };
   }, [selectedId]);
 
+  useEffect(() => {
+    if (!selectedId) {
+      setConnections({ autoLinked: [], suggested: [] });
+      setConnectionsError(null);
+      return;
+    }
+
+    let active = true;
+    setConnectionsError(null);
+
+    fetchJsonOrThrow<{
+      ok: boolean;
+      error?: string;
+    }>(`/api/profiles/${encodeURIComponent(selectedId)}/rediscover`, {
+      method: "POST",
+    })
+      .then((json) => {
+        if (!json.ok) {
+          throw new Error(json.error ?? "Failed to scan connections");
+        }
+        return fetchJsonOrThrow<{
+          ok: boolean;
+          connections?: ProfileConnections;
+          error?: string;
+        }>(`/api/profiles/${encodeURIComponent(selectedId)}/connections`);
+      })
+      .then((json) => {
+        if (!active) {
+          return;
+        }
+        if (!json.ok || !json.connections) {
+          throw new Error(json.error ?? "Failed to load connections");
+        }
+        setConnections(json.connections);
+      })
+      .catch((cause: unknown) => {
+        if (active) {
+          setConnections({ autoLinked: [], suggested: [] });
+          setConnectionsError(
+            cause instanceof Error
+              ? cause.message
+              : "Failed to load connections",
+          );
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedId]);
+
   const openVerify = (id: string) => {
     const url = new URL(window.location.href);
     url.searchParams.set("id", id);
@@ -216,9 +305,7 @@ export default function AdminView() {
   const pieInvalid = Math.max(0, 360 - pieVerified - piePending);
   const selectedName =
     detail?.name ?? rows.find((row) => row.id === selectedId)?.name ?? null;
-  const submissionsTitle = selectedName
-    ? `Overview of ${selectedName}`
-    : "Submissions";
+  const submissionsTitle = selectedName ?? "Submissions";
 
   const deleteSubmission = async () => {
     if (!detail) {
@@ -267,9 +354,9 @@ export default function AdminView() {
   return (
     <AdminLayout active="submissions" breadcrumbExtra={selectedName}>
       <section className="admin-page-shell">
-        <section className="admin-header-grid">
+        <section className={`admin-header-grid ${detail ? "submission-detail-header-grid" : ""}`}>
           <div className="admin-header-left">
-            <header className="admin-page-head border-0 flex w-full max-w-[920px] items-center justify-between gap-4">
+            <header className="admin-page-head submission-detail-heading border-0 flex items-center justify-between gap-4">
               <h1 className="text-4xl">{submissionsTitle}</h1>
               {detail ? (
                 <button
@@ -440,6 +527,8 @@ export default function AdminView() {
         <AdminSubmissionOverview
           detail={detail}
           saving={saving}
+          connections={connections}
+          connectionsError={connectionsError}
           onBack={backToList}
           onDecide={decide}
           onDelete={deleteSubmission}

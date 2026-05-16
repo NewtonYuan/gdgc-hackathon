@@ -2256,6 +2256,7 @@ button.deny {
   min-width: 0;
   padding: 1.5rem 1.25rem 2rem;
   background: #070303;
+  overflow-x: hidden;
 }
 
 .admin-page-shell {
@@ -2938,6 +2939,442 @@ th {
 .status-badge.unverified {
   color: var(--info);
   background: rgba(130, 167, 255, 0.12);
+}
+
+.submission-detail-header-grid {
+  display: block;
+}
+
+.submission-detail-header-grid .admin-header-left {
+  width: min(100%, 1220px);
+  max-width: none;
+}
+
+.submission-detail-heading {
+  box-sizing: border-box;
+  width: auto;
+  max-width: 1220px;
+  margin-left: 1.25rem;
+  margin-right: 1.25rem;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.submission-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 35%);
+  gap: 1rem;
+  box-sizing: border-box;
+  width: auto;
+  max-width: 1220px;
+  margin-left: 1.25rem;
+  margin-right: 1.25rem;
+  align-items: start;
+  overflow-x: hidden;
+}
+
+.submission-connections-panel,
+.submission-profile-panel {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.submission-connections-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.submission-connections-head h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.submission-connections-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.55rem;
+}
+
+.submission-action-button {
+  min-height: 2.45rem;
+  padding: 0.6rem 0.8rem;
+}
+
+.submission-action-button svg {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.submission-connections-grid {
+  display: grid;
+  gap: 1.05rem;
+  min-width: 0;
+}
+
+.submission-connections-list {
+  display: grid;
+  gap: 0.7rem;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.submission-connection-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 0.85rem;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.submission-connection-card:hover,
+.submission-connection-card:focus-visible {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.065);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.submission-connection-main {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.submission-connection-main strong {
+  display: block;
+  color: var(--text);
+  font-size: 0.98rem;
+}
+
+.submission-reason-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.submission-reason-pills span {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--muted);
+  padding: 0.22rem 0.48rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.submission-no-reasons {
+  margin: 0.45rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.submission-connection-meta {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.submission-score {
+  display: grid;
+  justify-items: end;
+  gap: 0.16rem;
+}
+
+.submission-score span {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.submission-score-value {
+  color: #86efac;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.submission-score-value.high {
+  color: #00d97e;
+}
+
+.submission-score-value.medium {
+  color: #d9b24c;
+}
+
+.submission-score-value.low {
+  color: var(--muted);
+}
+
+.submission-profile-sections {
+  display: grid;
+  gap: 1.35rem;
+}
+
+.submission-profile-section {
+  min-width: 0;
+}
+
+.submission-profile-section + .submission-profile-section {
+  border-top: 1px solid var(--line);
+  padding-top: 1.25rem;
+}
+
+.submission-profile-section h3 {
+  margin: 0 0 0.75rem;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.submission-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem 1rem;
+  margin: 0;
+}
+
+.submission-profile-field {
+  min-width: 0;
+}
+
+.submission-profile-field.wide {
+  grid-column: 1 / -1;
+}
+
+.submission-profile-field dt {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.submission-profile-field dd {
+  margin: 0.28rem 0 0;
+  min-width: 0;
+}
+
+.submission-profile-field p {
+  margin: 0;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 750;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.submission-missing-value {
+  color: rgba(255, 255, 255, 0.42) !important;
+  font-weight: 700 !important;
+}
+
+.submission-trust-field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.submission-trust-field p {
+  font-variant-numeric: tabular-nums;
+}
+
+.submission-trust-field div {
+  position: relative;
+  width: min(15rem, 100%);
+  height: 0.42rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.submission-trust-field div::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(90deg, #ff4f5e 0%, #d9b24c 50%, #00d97e 100%);
+  opacity: 0.24;
+}
+
+.submission-trust-field i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #ff4f5e 0%, #d9b24c 50%, #00d97e 100%);
+}
+
+.submission-documents-list {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.submission-documents-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: #121317;
+  padding: 0.55rem 0.65rem;
+}
+
+.submission-document-thumb {
+  display: flex;
+  width: 3rem;
+  height: 3rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 0.55rem;
+  background: #1f1f21;
+}
+
+.submission-document-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.submission-document-thumb span {
+  color: #fca5a5;
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+
+.submission-documents-list p {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.submission-more-link {
+  margin-top: 0.9rem;
+  border: 0;
+  background: transparent;
+  color: #86efac;
+  padding: 0;
+  font-size: 0.92rem;
+  font-weight: 800;
+  box-shadow: none;
+}
+
+.submission-more-link:hover,
+.submission-more-link:focus-visible {
+  color: #bbf7d0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.submission-profile-actions {
+  margin-top: 1.25rem;
+  padding: 1rem 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.submission-network-empty {
+  display: grid;
+  justify-items: center;
+  gap: 0.45rem;
+  padding: 2rem 1rem;
+  text-align: center;
+}
+
+.submission-network-empty svg {
+  width: 2rem;
+  height: 2rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.submission-network-empty strong {
+  color: var(--text);
+  font-size: 0.98rem;
+}
+
+.submission-network-empty p {
+  max-width: 18rem;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+@media (max-width: 1023px) {
+  .submission-detail-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .submission-connections-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .submission-connections-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .submission-detail-layout {
+    margin-left: 0.5rem;
+    margin-right: 0.5rem;
+  }
+
+  .submission-detail-heading {
+    margin-left: 0.5rem;
+    margin-right: 0.5rem;
+  }
+
+  .submission-profile-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .submission-missing-panel ul {
+    grid-template-columns: 1fr;
+  }
 }
 
 .avatar {
