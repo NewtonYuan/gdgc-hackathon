@@ -170,15 +170,6 @@ export function DesktopRealtimeView({ embedded = false }: DesktopRealtimeViewPro
           <p className="tagline">Waiting for phone tap events...</p>
         )}
       </article>
-
-      <article className="panel">
-        <h2>Known IDs</h2>
-        <div className="facts">
-          {records.map((row) => (
-            <p key={row.name}><span>{row.name}:</span> {toPersonId(row.name)}</p>
-          ))}
-        </div>
-      </article>
     </>
   )
 
