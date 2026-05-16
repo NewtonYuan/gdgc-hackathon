@@ -63,37 +63,38 @@ export function createInitialState(database: RecordEntry[]): GameState {
 // each of their tips as an Unverified record — filling gaps on people who
 // already exist, or adding brand-new entries for people not yet on file.
 function ingestClaim(database: RecordEntry[], npc: Npc): RecordEntry[] {
-  const next = database.map((row) =>
+  let next = database.map((row) =>
     row.name === npc.name
       ? { ...row, role: npc.claim.role, district: npc.claim.district, status: 'Trusted' as const }
       : row,
   )
 
   if (!next.some((row) => row.name === npc.name)) {
-    next.push({ name: npc.name, role: npc.claim.role, district: npc.claim.district, status: 'Trusted' })
+    next = [...next, { name: npc.name, role: npc.claim.role, district: npc.claim.district, status: 'Trusted' }]
   }
 
   for (const tip of npc.tips) {
-    applyTip(next, tip)
+    next = applyTip(next, tip)
   }
 
   return next
 }
 
-function applyTip(database: RecordEntry[], tip: NpcTip): void {
+function applyTip(database: RecordEntry[], tip: NpcTip): RecordEntry[] {
   const index = database.findIndex((row) => row.name === tip.name)
 
   if (index === -1) {
-    database.push({ name: tip.name, role: tip.role, district: tip.district, status: 'Unverified' })
-    return
+    return [...database, { name: tip.name, role: tip.role, district: tip.district, status: 'Unverified' }]
   }
 
   const row = database[index]
   if (row.status === 'Verified' || row.status === 'Trusted') {
-    return
+    return database
   }
 
-  database[index] = { name: row.name, role: tip.role, district: tip.district, status: 'Unverified' }
+  return database.map((entry, entryIndex) =>
+    entryIndex === index ? { name: row.name, role: tip.role, district: tip.district, status: 'Unverified' } : entry,
+  )
 }
 
 export function gameReducer(state: GameState | null, action: GameAction): GameState | null {

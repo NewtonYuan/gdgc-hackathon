@@ -234,27 +234,135 @@ th {
   width: 12px;
   height: 12px;
   display: inline-block;
-  border: 1px solid #2a1010;
+  border: 1px solid rgba(220, 244, 255, 0.34);
+  border-radius: 50%;
+  box-shadow: 0 0 12px currentColor;
 }
 
 .verified-node {
-  background: #2f9f49;
+  background: #38d96b;
+  color: #38d96b;
 }
 
 .inprocess-node {
-  background: #dfb463;
+  background: #e5b85d;
+  color: #e5b85d;
 }
 
 .denied-node {
-  background: #e12b2b;
+  background: #ff4c86;
+  color: #ff4c86;
 }
 
 .graph-canvas {
-  min-height: 520px;
-  border: 2px solid #2a1010;
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 1px solid rgba(104, 214, 255, 0.18);
   background:
-    radial-gradient(circle at top, rgba(161, 22, 22, 0.09), transparent 45%),
-    #0c0808;
+    radial-gradient(circle at 24% 32%, rgba(255, 255, 255, 0.34) 0 1px, transparent 2px),
+    radial-gradient(circle at 74% 18%, rgba(142, 218, 255, 0.42) 0 1px, transparent 2px),
+    radial-gradient(circle at 62% 72%, rgba(255, 207, 122, 0.38) 0 1px, transparent 2px),
+    radial-gradient(circle at center, rgba(42, 135, 190, 0.18), transparent 46%),
+    rgba(4, 8, 18, 0.64);
+  background-size: 180px 180px, 260px 260px, 220px 220px, auto, auto;
+  box-shadow:
+    inset 0 0 70px rgba(68, 186, 255, 0.14),
+    0 0 42px rgba(37, 137, 195, 0.12);
+}
+
+.graph-stage {
+  position: relative;
+  isolation: isolate;
+  height: clamp(560px, 62vh, 720px);
+  min-height: 560px;
+  margin-top: 1rem;
+  overflow: hidden;
+  border: 1px solid rgba(95, 216, 255, 0.24);
+  background:
+    radial-gradient(circle at 50% 46%, rgba(94, 205, 255, 0.14), transparent 31%),
+    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.08), transparent 18%),
+    linear-gradient(rgba(95, 216, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(95, 216, 255, 0.035) 1px, transparent 1px),
+    #02050f;
+  background-size: auto, auto, 42px 42px, 42px 42px, auto;
+  box-shadow:
+    inset 0 0 80px rgba(0, 0, 0, 0.88),
+    inset 0 0 120px rgba(28, 119, 176, 0.12),
+    0 0 38px rgba(0, 0, 0, 0.72);
+}
+
+.graph-stage::before,
+.graph-stage::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.graph-stage::before {
+  inset: 0;
+  background:
+    radial-gradient(circle at 12% 16%, rgba(255, 255, 255, 0.9) 0 1px, transparent 2px),
+    radial-gradient(circle at 86% 24%, rgba(151, 225, 255, 0.75) 0 1px, transparent 2px),
+    radial-gradient(circle at 38% 78%, rgba(255, 226, 157, 0.7) 0 1px, transparent 2px),
+    radial-gradient(circle at 68% 58%, rgba(255, 255, 255, 0.65) 0 1px, transparent 2px);
+  background-size: 260px 260px, 310px 310px, 230px 230px, 370px 370px;
+  opacity: 0.62;
+}
+
+.graph-stage::after {
+  inset: 0;
+  background:
+    radial-gradient(ellipse at center, transparent 40%, rgba(2, 5, 15, 0.72) 100%),
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.025) 0,
+      rgba(255, 255, 255, 0.025) 1px,
+      transparent 1px,
+      transparent 6px
+    );
+  mix-blend-mode: screen;
+  opacity: 0.44;
+}
+
+.graph-stage .graph-canvas {
+  position: absolute;
+  inset: 4%;
+  width: 92% !important;
+  height: 92% !important;
+  z-index: 1;
+}
+
+.orbit-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 0;
+  border: 1px solid rgba(95, 216, 255, 0.18);
+  border-radius: 50%;
+  pointer-events: none;
+  transform: translate(-50%, -50%) rotate(-16deg);
+  box-shadow: 0 0 24px rgba(95, 216, 255, 0.08);
+}
+
+.orbit-ring-one {
+  width: min(82%, 820px);
+  aspect-ratio: 1 / 0.34;
+}
+
+.orbit-ring-two {
+  width: min(62%, 620px);
+  aspect-ratio: 1 / 0.42;
+  transform: translate(-50%, -50%) rotate(24deg);
+}
+
+.orbit-ring-three {
+  width: min(42%, 430px);
+  aspect-ratio: 1 / 0.5;
+  transform: translate(-50%, -50%) rotate(72deg);
+  border-color: rgba(255, 217, 139, 0.16);
 }
 
 .graph-notes {
@@ -267,10 +375,11 @@ th {
 .graph-notes p {
   margin: 0;
   padding: 0.75rem;
-  border: 1px solid #2a1010;
-  background: rgba(161, 22, 22, 0.05);
+  border: 1px solid rgba(95, 216, 255, 0.18);
+  background: rgba(7, 18, 34, 0.72);
   color: var(--text);
   font-size: 0.82rem;
+  box-shadow: inset 0 0 18px rgba(95, 216, 255, 0.05);
 }
 
 .graph-notes span {
