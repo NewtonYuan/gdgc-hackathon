@@ -4,6 +4,7 @@ import UploadView from './realtime/UploadView'
 import AdminView from './realtime/AdminView'
 import DesktopAdminView from './realtime/DesktopAdminView'
 import CitizensView from './realtime/CitizensView'
+import AdminGraphView from './realtime/AdminGraphView'
 
 function App() {
   const path = window.location.pathname.toLowerCase()
@@ -26,6 +27,10 @@ function App() {
 
   if (path === '/citizens') {
     return <CitizensView />
+  }
+
+  if (path === '/admin/graph') {
+    return <AdminGraphView />
   }
 
   return <LandingView />

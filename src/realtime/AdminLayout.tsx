@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 type AdminLayoutProps = {
-  active: 'submissions' | 'desktop' | 'citizens'
+  active: 'submissions' | 'desktop' | 'citizens' | 'graph'
   children: ReactNode
 }
 
@@ -39,6 +39,14 @@ export default function AdminLayout({ active, children }: AdminLayoutProps) {
             >
               <img src="/icons/database.svg" alt="" aria-hidden="true" className="admin-nav-icon" />
               Citizens DB
+            </a>
+            <a
+              href="/admin/graph"
+              className={`admin-nav-item ${active === 'graph' ? 'active' : ''}`}
+              aria-current={active === 'graph' ? 'page' : undefined}
+            >
+              <img src="/icons/database.svg" alt="" aria-hidden="true" className="admin-nav-icon" />
+              Graph
             </a>
           </nav>
 
