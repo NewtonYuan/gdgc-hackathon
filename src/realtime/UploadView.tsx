@@ -9,7 +9,7 @@ type SubmissionResponse = {
     occupation: string
     address: string
     cardId: string
-    documentPath: string | null
+    documentPaths: string[]
     createdAt: string
   }
 }
@@ -20,6 +20,13 @@ type UploadFormState = {
   occupation: string
   address: string
   cardID: string
+}
+
+type QueuedFile = {
+  id: string
+  file: File
+  progress: number
+  done: boolean
 }
 
 function createGuid(): string {
@@ -43,6 +50,61 @@ function supportsWebNfc(): boolean {
   return typeof window !== 'undefined' && 'NDEFReader' in window
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+function FolderIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z" />
+    </svg>
+  )
+}
+
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M5 13l4 4L19 7" />
+    </svg>
+  )
+}
+
+function ProgressRing({ percent }: { percent: number }) {
+  const radius = 9
+  const circumference = 2 * Math.PI * radius
+  const clamped = Math.min(100, Math.max(0, percent))
+  const offset = circumference - (clamped / 100) * circumference
+
+  return (
+    <svg className="filerow-ring" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r={radius} fill="none" stroke="#3b0c0c" strokeWidth="3" />
+      <circle
+        className="filerow-ring-track"
+        cx="12"
+        cy="12"
+        r={radius}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        transform="rotate(-90 12 12)"
+      />
+    </svg>
+  )
+}
+
 export default function UploadView() {
   const [form, setForm] = useState<UploadFormState>({
     name: '',
@@ -51,7 +113,8 @@ export default function UploadView() {
     address: '',
     cardID: createGuid(),
   })
-  const [file, setFile] = useState<File | null>(null)
+  const [queue, setQueue] = useState<QueuedFile[]>([])
+  const [dragging, setDragging] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<string>('')
 
@@ -72,12 +135,38 @@ export default function UploadView() {
     setForm((prev) => ({ ...prev, [key]: value }))
   }
 
+  const addFiles = (fileList: FileList | null) => {
+    if (submitting || !fileList || fileList.length === 0) {
+      return
+    }
+    const added: QueuedFile[] = Array.from(fileList).map((file) => ({
+      id: createGuid(),
+      file,
+      progress: 0,
+      done: false,
+    }))
+    setQueue((prev) => [...prev, ...added])
+  }
+
+  const removeFile = (id: string) => {
+    if (submitting) {
+      return
+    }
+    setQueue((prev) => prev.filter((q) => q.id !== id))
+  }
+
+  const onDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setDragging(false)
+    addFiles(event.dataTransfer.files)
+  }
+
   const validateForm = (): string | null => {
     if (!form.name.trim()) return 'Name is required.'
     if (!form.phone.trim()) return 'Phone is required.'
     if (!form.occupation.trim()) return 'Occupation is required.'
     if (!form.address.trim()) return 'Address is required.'
-    if (!file) return 'A document file is required.'
+    if (queue.length === 0) return 'Add at least one document.'
     return null
   }
 
@@ -89,9 +178,7 @@ export default function UploadView() {
     body.set('address', form.address)
     body.set('cardID', form.cardID)
     body.set('cardPayload', JSON.stringify(cardPayload))
-    if (file) {
-      body.set('documents', file)
-    }
+    queue.forEach((q) => body.append('documents', q.file))
 
     const res = await fetch('/api/upload', { method: 'POST', body })
     const json = (await res.json()) as SubmissionResponse
@@ -126,11 +213,24 @@ export default function UploadView() {
       return
     }
 
-    // NFC write succeeded — auto-save the applicant details to the Upload DB.
+    // NFC write succeeded — auto-save to the DB and animate the upload rings.
+    setQueue((prev) => prev.map((q) => ({ ...q, progress: 0, done: false })))
+    const ticker = window.setInterval(() => {
+      setQueue((prev) =>
+        prev.map((q) =>
+          q.done ? q : { ...q, progress: Math.min(q.progress + 6 + Math.random() * 10, 94) },
+        ),
+      )
+    }, 130)
+
     try {
-      const id = await saveToDb()
+      const [id] = await Promise.all([saveToDb(), sleep(1900)])
+      window.clearInterval(ticker)
+      setQueue((prev) => prev.map((q) => ({ ...q, progress: 100, done: true })))
       setMessage(`NFC card written. Saved to Upload DB (id: ${id}).`)
     } catch (cause) {
+      window.clearInterval(ticker)
+      setQueue((prev) => prev.map((q) => ({ ...q, progress: 0, done: false })))
       setMessage(
         cause instanceof Error
           ? `NFC card written, but save failed: ${cause.message}`
@@ -166,10 +266,79 @@ export default function UploadView() {
             Address
             <input value={form.address} onChange={(e) => onChange('address', e.target.value)} required />
           </label>
-          <label>
-            documents
-            <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required />
-          </label>
+
+          <div className="upload-docs-field">
+            <span className="upload-docs-label">Documents</span>
+            <div className="upload-docs">
+              <div
+                className={`dropzone ${dragging ? 'dragging' : ''}`}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  if (!submitting) setDragging(true)
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault()
+                  setDragging(false)
+                }}
+                onDrop={onDrop}
+              >
+                <FolderIcon className="dropzone-icon" />
+                <p className="dropzone-text">Drag your files here</p>
+                <div className="dropzone-divider">
+                  <span>Or</span>
+                </div>
+                <label className="browse-link">
+                  Browse Your Computer
+                  <input
+                    type="file"
+                    multiple
+                    hidden
+                    onChange={(e) => {
+                      addFiles(e.target.files)
+                      e.target.value = ''
+                    }}
+                  />
+                </label>
+              </div>
+
+              <div className="filelist">
+                <div className="filelist-head">
+                  <span>Uploaded File(s)</span>
+                  <span className="filelist-count">
+                    {queue.length} out of {queue.length} files uploaded
+                  </span>
+                </div>
+                <div className="filelist-rows">
+                  {queue.length === 0 ? (
+                    <p className="filelist-empty">No files added yet.</p>
+                  ) : (
+                    queue.map((q) => (
+                      <div className="filerow" key={q.id}>
+                        <FolderIcon className="filerow-icon" />
+                        <span className="filerow-name" title={q.file.name}>
+                          {q.file.name}
+                        </span>
+                        {q.done ? (
+                          <CheckIcon className="filerow-check" />
+                        ) : submitting ? (
+                          <ProgressRing percent={q.progress} />
+                        ) : (
+                          <button
+                            type="button"
+                            className="filerow-remove"
+                            onClick={() => removeFile(q.id)}
+                            aria-label={`Remove ${q.file.name}`}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
 
           <div className="actions">
             <button type="button" onClick={onWriteCard} disabled={submitting}>
