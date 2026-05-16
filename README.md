@@ -41,14 +41,15 @@ The current implementation combines a React frontend, a Node.js backend, SQLite-
 
 ## How It Works
 
-1. A user opens `/upload` and enters identity information.
-2. Supporting files are attached and the app prepares an NFC payload containing the applicant data.
-3. The frontend writes the payload to an NFC card when Web NFC is available, then uploads the submission to the backend.
-4. The backend stores the submission in `data/records.db` and saves uploaded files under `uploads/`.
-5. An admin opens `/admin` to review submissions and decide whether a person is verified or invalid.
-6. A checker device opens `/checker`, reads card data, and sends a scan event over WebSocket.
-7. The desktop verifier at `/desktop` matches the scanned person against reviewed submissions and returns a live verdict.
-8. Investigators can open `/admin/graph` to inspect the preloaded citizen trust network from `data/verify_deny.db`.
+1. A user opens `/upload`, enters identity details, and attaches supporting documents.
+2. The app generates an NFC payload from the submitted identity data.
+3. When Web NFC is available, the frontend writes that payload to an NFC card and sends the same submission to the backend.
+4. The backend stores the new submission in `[database path]` and saves uploaded files under `uploads/`.
+5. An admin opens `/admin` to review incoming submissions, inspect their details, and mark them as `verified`, `pending`, or `invalid`.
+6. A checker device opens `/checker`, reads card data from the NFC payload, and sends a live scan event over WebSocket.
+7. The desktop verifier at `/desktop` receives that scan, compares the scanned identity against reviewed submission records, and returns a live verdict back to the checker.
+8. Investigators can open `/admin/graph` to inspect a reconstructed legacy trust graph loaded from `[database path]`.
+9. The intended architecture is to consolidate these flows into a single database, but in the current project build the submission workflow and the recovered graph workflow still read from two separate databases while that bug remains unresolved.
 
 ## Tech Stack
 
