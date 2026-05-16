@@ -19,7 +19,7 @@ type VerdictEvent = {
   phoneId: string
   verified: boolean
   name: string
-  status: string
+  status: 'PENDING' | 'VERIFIED' | 'INVALID'
 }
 
 function createClientId(): string {
@@ -116,6 +116,11 @@ export function DesktopRealtimeView({ embedded = false }: DesktopRealtimeViewPro
       setLastScan({ personId: payload.personId, phoneId: payload.phoneId, cardData: payload.cardData })
       const person = personMap.get(payload.personId)
       const verified = person?.decision === 'verified'
+      const status: VerdictEvent['status'] = person?.decision === 'verified'
+        ? 'VERIFIED'
+        : person?.decision === 'invalid'
+          ? 'INVALID'
+          : 'PENDING'
 
       const verdict: VerdictEvent = {
         type: 'verdict',
@@ -123,7 +128,7 @@ export function DesktopRealtimeView({ embedded = false }: DesktopRealtimeViewPro
         phoneId: payload.phoneId,
         verified: Boolean(verified),
         name: person?.name ?? 'Unknown Person',
-        status: (person?.decision ?? 'pending').toUpperCase(),
+        status,
       }
       ws.send(JSON.stringify(verdict))
     }
@@ -186,6 +191,11 @@ export function DesktopRealtimeView({ embedded = false }: DesktopRealtimeViewPro
 
 export function PhoneRealtimeView() {
   const [deviceId] = useState(() => createClientId())
+  const [mockStatus] = useState<'verified' | 'pending' | 'invalid' | null>(() => {
+    const params = new URLSearchParams(window.location.search)
+    const mock = params.get('mock')?.toLowerCase()
+    return mock === 'verified' || mock === 'pending' || mock === 'invalid' ? mock : null
+  })
   const [cardData] = useState<Record<string, unknown> | null>(() => {
     const params = new URLSearchParams(window.location.search)
     const raw = params.get('card')
@@ -199,7 +209,18 @@ export function PhoneRealtimeView() {
     }
   })
   const [connection, setConnection] = useState('connecting')
-  const [result, setResult] = useState<{ verified: boolean; name: string; status: string } | null>(null)
+  const [result, setResult] = useState<{ verified: boolean; name: string; status: 'PENDING' | 'VERIFIED' | 'INVALID' } | null>(() => {
+    if (mockStatus === 'verified') {
+      return { verified: true, name: 'Preview Person', status: 'VERIFIED' }
+    }
+    if (mockStatus === 'pending') {
+      return { verified: false, name: 'Preview Person', status: 'PENDING' }
+    }
+    if (mockStatus === 'invalid') {
+      return { verified: false, name: 'Preview Person', status: 'INVALID' }
+    }
+    return null
+  })
   const [sent, setSent] = useState(false)
   const [missingId, setMissingId] = useState(true)
 
@@ -215,6 +236,10 @@ export function PhoneRealtimeView() {
   }, [deviceId])
 
   useEffect(() => {
+    if (mockStatus) {
+      setConnection('connected')
+      return
+    }
     const ws = new WebSocket(socketUrl('phone', deviceId))
     ws.onopen = () => setConnection('connected')
     ws.onclose = () => setConnection('disconnected')
@@ -230,9 +255,12 @@ export function PhoneRealtimeView() {
 
     ;(window as unknown as { __scanSocket?: WebSocket }).__scanSocket = ws
     return () => ws.close()
-  }, [deviceId])
+  }, [deviceId, mockStatus])
 
   useEffect(() => {
+    if (mockStatus) {
+      return
+    }
     const params = new URLSearchParams(window.location.search)
     const pid = params.get('pid')
     const effectivePid = pid ?? (typeof cardData?.pid === 'string' ? cardData.pid : null)
@@ -241,9 +269,12 @@ export function PhoneRealtimeView() {
         trySendScan(effectivePid, cardData)
       }, 250)
     }
-  }, [cardData, trySendScan])
+  }, [cardData, trySendScan, mockStatus])
 
   useEffect(() => {
+    if (mockStatus) {
+      return
+    }
     if (typeof window === 'undefined' || !('NDEFReader' in window)) {
       return
     }
@@ -300,18 +331,42 @@ export function PhoneRealtimeView() {
         reader.onreading = null
       }
     }
-  }, [deviceId, trySendScan])
+  }, [deviceId, trySendScan, mockStatus])
 
-  const bgClass = result ? (result.verified ? 'phone-ok' : 'phone-bad') : 'phone-neutral'
+  useEffect(() => {
+    if (mockStatus || !result) {
+      return
+    }
+    const timeoutId = window.setTimeout(() => {
+      setResult(null)
+      setSent(false)
+    }, 5000)
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [result, mockStatus])
+
+  const bgClass = !result
+    ? 'phone-neutral'
+    : result.status === 'VERIFIED'
+      ? 'phone-ok'
+      : result.status === 'PENDING'
+        ? 'phone-pending'
+        : 'phone-bad'
+  const connectionLabel = connection === 'connected' ? 'Connected' : 'Disconnected'
 
   return (
     <main className={`phone-screen ${bgClass}`}>
-      <div className="phone-card">
-        <p className="tagline">Connection: {connection}</p>
+      <div className={`phone-card ${result ? `phone-card-${result.status.toLowerCase()}` : 'phone-card-neutral'}`}>
+        <button type="button" className="phone-back-button" onClick={() => window.location.assign('/')}>
+          Back
+        </button>
+        <p className="tagline phone-connection">{connectionLabel}</p>
         {!result ? (
           <>
-            <h1>Tap Card</h1>
-            <p className="tagline">
+            <div className="phone-icon-ring">•</div>
+            <h1 className="phone-title">Tap Card</h1>
+            <p className="tagline phone-subtitle">
               {missingId
                 ? 'No person ID detected. Use NFC JSON with a pid field.'
                 : sent
@@ -321,9 +376,19 @@ export function PhoneRealtimeView() {
           </>
         ) : (
           <>
-            <h1>{result.verified ? 'VERIFIED' : 'DENIED'}</h1>
-            <p>{result.name}</p>
-            <p>{result.status}</p>
+            <div className="phone-icon-ring">
+              {result.status === 'VERIFIED' ? '✓' : result.status === 'PENDING' ? '…' : '✕'}
+            </div>
+            <h1 className="phone-title">
+              {result.status === 'VERIFIED' ? 'Verified' : result.status === 'PENDING' ? 'Pending' : 'Invalid'}
+            </h1>
+            <p className="phone-subtitle">
+              {result.status === 'VERIFIED'
+                ? `${result.name} is verified.`
+                : result.status === 'PENDING'
+                  ? `${result.name} is still pending review.`
+                  : `${result.name} is invalid.`}
+            </p>
           </>
         )}
       </div>
