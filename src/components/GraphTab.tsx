@@ -81,10 +81,13 @@ function connectionVisuals(weight: number) {
 
 type SpaceNodeProps = {
   node: PositionedNode
+  focusMode: boolean
+  isFocused: boolean
+  isHighlighted: boolean
   onSelect: (node: GraphNodeData) => void
 }
 
-function SpaceNode({ node, onSelect }: SpaceNodeProps) {
+function SpaceNode({ node, focusMode, isFocused, isHighlighted, onSelect }: SpaceNodeProps) {
   const bodyRef = useRef<THREE.Group>(null)
   const coreRef = useRef<THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>>(null)
   const haloInnerRef = useRef<THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>>(null)
@@ -92,6 +95,8 @@ function SpaceNode({ node, onSelect }: SpaceNodeProps) {
   const sparkMaterialRef = useRef<THREE.PointsMaterial>(null)
   const sparkRef = useRef<THREE.Points>(null)
   const statusStyle = STATUS_STYLES[node.statusBucket]
+  const emphasisOpacity = focusMode && !isHighlighted ? 0.18 : 1
+  const showLabel = !focusMode || isHighlighted
   const sparkGeometry = useMemo(() => {
     const positions: number[] = []
     const particleCount = 72
@@ -113,8 +118,9 @@ function SpaceNode({ node, onSelect }: SpaceNodeProps) {
     return geometry
   }, [node.id])
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const pulse = 1 + Math.sin(state.clock.elapsedTime * 2.3 + node.position[2]) * 0.12
+    const transition = 1 - Math.exp(-delta * 10)
 
     if (bodyRef.current) {
       bodyRef.current.rotation.z = state.clock.elapsedTime * 0.12
@@ -123,19 +129,39 @@ function SpaceNode({ node, onSelect }: SpaceNodeProps) {
     }
 
     if (coreRef.current) {
-      coreRef.current.material.opacity = 0.9 + Math.sin(state.clock.elapsedTime * 2.8 + node.position[1]) * 0.08
+      const targetOpacity = (0.9 + Math.sin(state.clock.elapsedTime * 2.8 + node.position[1]) * 0.08) * emphasisOpacity
+      coreRef.current.material.opacity = THREE.MathUtils.lerp(coreRef.current.material.opacity, targetOpacity, transition)
     }
 
     if (haloInnerRef.current) {
-      haloInnerRef.current.material.opacity = 0.24 + Math.sin(state.clock.elapsedTime * 2.1 + node.position[0]) * 0.05
+      const targetOpacity = (0.24 + Math.sin(state.clock.elapsedTime * 2.1 + node.position[0]) * 0.05) * emphasisOpacity
+      haloInnerRef.current.material.opacity = THREE.MathUtils.lerp(
+        haloInnerRef.current.material.opacity,
+        targetOpacity,
+        transition,
+      )
     }
 
     if (haloOuterRef.current) {
-      haloOuterRef.current.material.opacity = 0.12 + Math.sin(state.clock.elapsedTime * 1.7 + node.position[2]) * 0.04
+      const targetOpacity =
+        (0.12 + Math.sin(state.clock.elapsedTime * 1.7 + node.position[2]) * 0.04 + (isFocused ? 0.08 : 0)) *
+        emphasisOpacity
+      const targetScale = isFocused ? 1.2 : 1
+      haloOuterRef.current.material.opacity = THREE.MathUtils.lerp(
+        haloOuterRef.current.material.opacity,
+        targetOpacity,
+        transition,
+      )
+      haloOuterRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), transition)
     }
 
     if (sparkMaterialRef.current) {
-      sparkMaterialRef.current.opacity = 0.48 + Math.sin(state.clock.elapsedTime * 3.1 + node.position[0]) * 0.18
+      const targetOpacity = (0.48 + Math.sin(state.clock.elapsedTime * 3.1 + node.position[0]) * 0.18) * emphasisOpacity
+      sparkMaterialRef.current.opacity = THREE.MathUtils.lerp(
+        sparkMaterialRef.current.opacity,
+        targetOpacity,
+        transition,
+      )
     }
   })
 
@@ -191,30 +217,72 @@ function SpaceNode({ node, onSelect }: SpaceNodeProps) {
           />
         </points>
       </group>
-      <Billboard position={[0, -0.72, 0]} follow lockX={false} lockY={false} lockZ={false}>
-        <Text
-          fontSize={0.14}
-          maxWidth={2.3}
-          anchorX="center"
-          anchorY="middle"
-          color={statusStyle.label}
-          outlineWidth={0.018}
-          outlineColor="#020612"
-        >
-          {node.person.fullName}
-        </Text>
-      </Billboard>
+      {showLabel ? (
+        <Billboard position={[0, -0.72, 0]} follow lockX={false} lockY={false} lockZ={false}>
+          <Text
+            fontSize={0.14}
+            maxWidth={2.3}
+            anchorX="center"
+            anchorY="middle"
+            color={statusStyle.label}
+            outlineWidth={0.018}
+            outlineColor="#020612"
+          >
+            {node.person.fullName}
+          </Text>
+        </Billboard>
+      ) : null}
     </group>
+  )
+}
+
+type GraphEdgeProps = {
+  edge: GraphPayload['edges'][number]
+  points: [[number, number, number], [number, number, number]]
+  isConnectedToFocus: boolean
+  focusMode: boolean
+}
+
+function GraphEdge({ edge, points, isConnectedToFocus, focusMode }: GraphEdgeProps) {
+  const lineRef = useRef<any>(null)
+  const visual = connectionVisuals(edge.overlapScore)
+  const targetOpacity = focusMode && !isConnectedToFocus ? 0.1 : Math.min(1, visual.opacity + (isConnectedToFocus ? 0.08 : 0))
+
+  useFrame((_, delta) => {
+    if (!lineRef.current?.material || typeof lineRef.current.material.opacity !== 'number') {
+      return
+    }
+
+    const transition = 1 - Math.exp(-delta * 10)
+    lineRef.current.material.opacity = THREE.MathUtils.lerp(
+      lineRef.current.material.opacity,
+      targetOpacity,
+      transition,
+    )
+  })
+
+  return (
+    <Line
+      ref={lineRef}
+      points={points}
+      color={visual.color}
+      lineWidth={visual.lineWidth}
+      transparent
+      opacity={targetOpacity}
+    />
   )
 }
 
 type GraphSceneProps = {
   graph: GraphPayload
+  focusedNodeId: string | null
+  highlightedNodeIds: Set<string> | null
   onSelectNode: (node: GraphNodeData) => void
 }
 
-function GraphScene({ graph, onSelectNode }: GraphSceneProps) {
+function GraphScene({ graph, focusedNodeId, highlightedNodeIds, onSelectNode }: GraphSceneProps) {
   const { nodes, edges } = graph
+  const focusMode = Boolean(focusedNodeId && highlightedNodeIds)
   const positionedNodes = useMemo(() => buildNodePositions(nodes), [nodes])
   const positionById = useMemo(
     () => new Map(positionedNodes.map((node) => [node.id, node.position])),
@@ -233,27 +301,36 @@ function GraphScene({ graph, onSelectNode }: GraphSceneProps) {
         {edges.map((edge) => {
           const source = positionById.get(edge.source)
           const target = positionById.get(edge.target)
-          const visual = connectionVisuals(edge.overlapScore)
 
           if (!source || !target) {
             return null
           }
 
           return (
-            <Line
+            <GraphEdge
               key={edge.id}
+              edge={edge}
               points={[source, target]}
-              color={visual.color}
-              lineWidth={visual.lineWidth}
-              transparent
-              opacity={visual.opacity}
+              focusMode={focusMode}
+              isConnectedToFocus={Boolean(focusedNodeId && (edge.source === focusedNodeId || edge.target === focusedNodeId))}
             />
           )
         })}
 
-        {positionedNodes.map((node) => (
-          <SpaceNode key={node.id} node={node} onSelect={onSelectNode} />
-        ))}
+        {positionedNodes.map((node) => {
+          const isHighlighted = highlightedNodeIds?.has(node.id) ?? false
+
+          return (
+            <SpaceNode
+              key={node.id}
+              node={node}
+              focusMode={focusMode}
+              isFocused={node.id === focusedNodeId}
+              isHighlighted={isHighlighted}
+              onSelect={onSelectNode}
+            />
+          )
+        })}
       </group>
 
       <OrbitControls
@@ -680,6 +757,20 @@ function GraphTab({ graph }: GraphTabProps) {
     () => graph.nodes.filter((node) => hiddenNodeIds.includes(node.id)),
     [graph.nodes, hiddenNodeIds],
   )
+  const adjacencyByNodeId = useMemo(() => {
+    const adjacency = new Map<string, Set<string>>()
+
+    for (const node of visibleGraph.nodes) {
+      adjacency.set(node.id, new Set())
+    }
+
+    for (const edge of visibleGraph.edges) {
+      adjacency.get(edge.source)?.add(edge.target)
+      adjacency.get(edge.target)?.add(edge.source)
+    }
+
+    return adjacency
+  }, [visibleGraph])
   const statusCounts = useMemo(
     () =>
       visibleGraph.nodes.reduce(
@@ -698,8 +789,20 @@ function GraphTab({ graph }: GraphTabProps) {
 
   const activeSelectedNode =
     selectedNode && !hiddenNodeIds.includes(selectedNode.id) ? selectedNode : null
+  const focusedNodeId = activeSelectedNode?.id ?? null
+  const highlightedNodeIds = useMemo(() => {
+    if (!focusedNodeId) {
+      return null
+    }
+
+    return new Set([focusedNodeId, ...(adjacencyByNodeId.get(focusedNodeId) ?? [])])
+  }, [adjacencyByNodeId, focusedNodeId])
 
   function selectNode(node: GraphNodeData) {
+    if (selectedNode?.id === node.id) {
+      return
+    }
+
     setSelectedNode(node)
   }
 
@@ -793,7 +896,13 @@ function GraphTab({ graph }: GraphTabProps) {
             style={{ width: '100%', height: '100%' }}
             onPointerMissed={closeInspector}
           >
-            <GraphScene key={databaseSignature} graph={visibleGraph} onSelectNode={selectNode} />
+            <GraphScene
+              key={databaseSignature}
+              graph={visibleGraph}
+              focusedNodeId={focusedNodeId}
+              highlightedNodeIds={highlightedNodeIds}
+              onSelectNode={selectNode}
+            />
           </Canvas>
         </div>
 
