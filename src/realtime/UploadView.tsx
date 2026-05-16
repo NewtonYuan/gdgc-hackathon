@@ -246,6 +246,24 @@ export default function UploadView() {
     }
   }
 
+  const onSaveWithoutNfc = async () => {
+    if (submitting) {
+      return
+    }
+
+    setSubmitting(true)
+    setMessage('')
+    try {
+      const id = await saveToDb()
+      setQueue((prev) => prev.map((q) => ({ ...q, progress: 100, done: true })))
+      setMessage(`Saved to records DB without NFC (id: ${id}).`)
+    } catch (cause) {
+      setMessage(cause instanceof Error ? `Save failed: ${cause.message}` : 'Save failed')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <main className="terminal-shell upload-view">
       <header className="topbar">
@@ -359,6 +377,9 @@ export default function UploadView() {
           <div className="actions">
             <button type="button" onClick={onWriteCard} disabled={submitting}>
               {submitting ? 'Working...' : 'Write NFC Card'}
+            </button>
+            <button type="button" className="secondary" onClick={onSaveWithoutNfc} disabled={submitting}>
+              Save Without NFC
             </button>
           </div>
         </form>
