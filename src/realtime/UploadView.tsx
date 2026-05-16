@@ -331,28 +331,31 @@ export default function UploadView() {
                   {queue.length === 0 ? (
                     <p className="filelist-empty">No files added yet.</p>
                   ) : (
-                    queue.map((q) => (
-                      <div className="filerow" key={q.id}>
-                        <FolderIcon className="filerow-icon" />
-                        <span className="filerow-name" title={q.file.name}>
-                          {q.file.name}
-                        </span>
-                        {q.done ? (
-                          <CheckIcon className="filerow-check" />
-                        ) : submitting ? (
-                          <ProgressRing percent={q.progress} />
-                        ) : (
-                          <button
-                            type="button"
-                            className="filerow-remove"
-                            onClick={() => removeFile(q.id)}
-                            aria-label={`Remove ${q.file.name}`}
-                          >
-                            Remove
-                          </button>
-                        )}
-                      </div>
-                    ))
+                    queue.map((q) => {
+                      const displayName = q.file.name || 'Unnamed file'
+                      return (
+                        <div className="filerow" key={q.id}>
+                          <FolderIcon className="filerow-icon" />
+                          <span className="filerow-name" title={displayName}>
+                            {displayName}
+                          </span>
+                          {q.done ? (
+                            <CheckIcon className="filerow-check" />
+                          ) : submitting ? (
+                            <ProgressRing percent={q.progress} />
+                          ) : (
+                            <button
+                              type="button"
+                              className="filerow-remove"
+                              onClick={() => removeFile(q.id)}
+                              aria-label={`Remove ${displayName}`}
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })
                   )}
                 </div>
               </div>

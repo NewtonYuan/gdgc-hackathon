@@ -1124,6 +1124,8 @@ button.deny {
 .filelist {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  min-width: 0;
   min-height: 230px;
   border: 2px solid #5a1313;
   background: #0b0909;
@@ -1158,6 +1160,7 @@ button.deny {
   padding: 0.5rem;
   overflow-y: auto;
   max-height: 250px;
+  min-width: 0;
 }
 
 .filelist-empty {
@@ -1170,6 +1173,8 @@ button.deny {
   display: flex;
   align-items: center;
   gap: 0.55rem;
+  width: 100%;
+  min-width: 0;
   padding: 0.45rem 0.55rem;
   background: #140d0d;
   border: 1px solid #3b0c0c;
@@ -1183,7 +1188,7 @@ button.deny {
 }
 
 .filerow-name {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
   font-size: 0.8rem;
   white-space: nowrap;
