@@ -152,6 +152,7 @@ export default function UploadView() {
   } | null>(null);
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [waitingForTap, setWaitingForTap] = useState(false);
+  const [previewModal, setPreviewModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -269,6 +270,7 @@ export default function UploadView() {
         }
       ).NDEFReader;
       const ndef = new ReaderCtor();
+      setPreviewModal(false);
       setWaitingForTap(true);
       await ndef.write(JSON.stringify(cardPayload));
     } catch (cause) {
@@ -317,30 +319,6 @@ export default function UploadView() {
         cause instanceof Error
           ? `NFC card written, but save failed: ${cause.message}`
           : "NFC card written, but save failed",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const onSaveWithoutNfc = async () => {
-    if (submitting) {
-      return;
-    }
-
-    setSubmitting(true);
-    setMessage("");
-    try {
-      const id = await saveToDb();
-      setQueue((prev) =>
-        prev.map((q) => ({ ...q, progress: 100, done: true })),
-      );
-      setMessage(`Saved to records DB without NFC (id: ${id}).`);
-    } catch (cause) {
-      setMessage(
-        cause instanceof Error
-          ? `Save failed: ${cause.message}`
-          : "Save failed",
       );
     } finally {
       setSubmitting(false);
@@ -483,14 +461,6 @@ export default function UploadView() {
             <button type="button" onClick={onWriteCard} disabled={submitting}>
               {submitting ? "Working..." : "Write NFC Card"}
             </button>
-            <button
-              type="button"
-              className="secondary"
-              onClick={onSaveWithoutNfc}
-              disabled={submitting}
-            >
-              Save Without NFC
-            </button>
           </div>
         </form>
 
@@ -503,7 +473,9 @@ export default function UploadView() {
       {snackbar ? (
         <div
           className={`fixed bottom-6 right-6 z-50 w-[360px] max-w-[calc(100vw-2rem)] rounded-2xl px-4 py-3 text-white transition-all duration-300 ease-out ${
-            snackbarVisible ? "translate-x-0 opacity-100" : "translate-x-10 opacity-0"
+            snackbarVisible
+              ? "translate-x-0 opacity-100"
+              : "translate-x-10 opacity-0"
           } ${snackbar.tone === "success" ? "bg-[#63a96b]" : "bg-[#bf6a71]"}`}
           role="status"
           aria-live="polite"
@@ -524,12 +496,40 @@ export default function UploadView() {
         </div>
       ) : null}
       {waitingForTap ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-[#3c414b] bg-[#1f1f21] p-6 text-white">
-            <p className="text-[22px] font-extrabold leading-6">Waiting for NFC tap</p>
-            <p className="mt-2 text-[15px] text-zinc-200">
-              Hold the NFC card near your phone to continue.
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => {
+            if (previewModal) {
+              setWaitingForTap(false);
+              setPreviewModal(false);
+            }
+          }}
+        >
+          <div className="w-full max-w-md rounded-2xl bg-[#1f1f21] p-6 text-center text-white">
+            <p className="text-[22px] font-extrabold leading-6">
+              Waiting for NFC tap
             </p>
+            <p className="mt-2 text-[15px] text-zinc-200">
+              Hold the card near your phone
+            </p>
+            <img
+              src="/icons/nfc-modal.svg"
+              alt=""
+              aria-hidden="true"
+              className="mx-auto mt-5 h-24 w-24 opacity-90"
+            />
+            {previewModal ? (
+              <button
+                type="button"
+                className="secondary mt-4"
+                onClick={() => {
+                  setWaitingForTap(false);
+                  setPreviewModal(false);
+                }}
+              >
+                Close
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}
