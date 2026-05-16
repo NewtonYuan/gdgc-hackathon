@@ -18,9 +18,8 @@ const clients = new Map()
 
 const dataDir = path.join(__dirname, 'data')
 const uploadsDir = path.join(__dirname, 'uploads')
-const uploadDbPath = path.join(dataDir, 'upload_records.db')
+const uploadDbPath = path.join(dataDir, 'records.db')
 let uploadDb = null
-let SQL = null
 
 function createServerId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -32,6 +31,33 @@ function createServerId() {
 function sendJson(ws, payload) {
   if (ws.readyState === ws.OPEN) {
     ws.send(JSON.stringify(payload))
+  }
+}
+
+function mapSubmissionRow(row) {
+  let status = row[9] ? String(row[9]).toLowerCase() : 'pending'
+  if (status === 'accepted') {
+    status = 'verified'
+  }
+  if (status === 'declined') {
+    status = 'invalid'
+  }
+  if (status !== 'pending' && status !== 'verified' && status !== 'invalid') {
+    status = 'pending'
+  }
+
+  return {
+    id: String(row[0]),
+    name: String(row[1]),
+    phone: String(row[2]),
+    occupation: String(row[3]),
+    address: String(row[4] ?? ''),
+    cardId: String(row[5]),
+    cardPayload: String(row[6] ?? '{}'),
+    documentPath: row[7] ? String(row[7]) : null,
+    createdAt: String(row[8]),
+    decision: status,
+    decidedAt: row[10] ? String(row[10]) : null,
   }
 }
 
@@ -47,7 +73,7 @@ async function initUploadDb() {
   await fs.mkdir(dataDir, { recursive: true })
   await fs.mkdir(uploadsDir, { recursive: true })
 
-  SQL = await initSqlJs({
+  const SQL = await initSqlJs({
     locateFile: (file) => path.join(__dirname, 'node_modules', 'sql.js', 'dist', file),
   })
 
@@ -66,12 +92,31 @@ async function initUploadDb() {
       name TEXT NOT NULL,
       phone TEXT NOT NULL,
       occupation TEXT NOT NULL,
+      address TEXT NOT NULL,
       card_id TEXT NOT NULL,
       card_payload TEXT NOT NULL,
       document_path TEXT,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      decision TEXT,
+      decided_at TEXT
     );
   `)
+
+  // Migrations for older DB files.
+  const columns = uploadDb.exec('PRAGMA table_info(submissions);')
+  const colNames = columns.length > 0 ? columns[0].values.map((row) => String(row[1])) : []
+  if (!colNames.includes('address')) {
+    uploadDb.exec("ALTER TABLE submissions ADD COLUMN address TEXT NOT NULL DEFAULT '';")
+  }
+  if (!colNames.includes('decision')) {
+    uploadDb.exec('ALTER TABLE submissions ADD COLUMN decision TEXT;')
+  }
+  if (!colNames.includes('decided_at')) {
+    uploadDb.exec('ALTER TABLE submissions ADD COLUMN decided_at TEXT;')
+  }
+  uploadDb.exec("UPDATE submissions SET decision = 'verified' WHERE lower(decision) = 'accepted';")
+  uploadDb.exec("UPDATE submissions SET decision = 'invalid' WHERE lower(decision) = 'declined';")
+  uploadDb.exec("UPDATE submissions SET decision = 'pending' WHERE decision IS NULL OR trim(decision) = '';")
 
   await persistUploadDb()
 }
@@ -87,6 +132,7 @@ const storage = multer.diskStorage({
 })
 
 const upload = multer({ storage })
+app.use(express.json())
 
 httpServer.on('upgrade', (req, socket, head) => {
   if (!req.url?.startsWith('/ws')) {
@@ -135,7 +181,7 @@ httpServer.on('upgrade', (req, socket, head) => {
 
 app.use('/uploads', express.static(uploadsDir))
 
-app.post('/api/upload', upload.single('documents'), async (req, res) => {
+app.post('/api/upload', upload.array('documents'), async (req, res) => {
   try {
     if (!uploadDb) {
       res.status(500).json({ ok: false, error: 'Upload DB not initialized' })
@@ -145,22 +191,25 @@ app.post('/api/upload', upload.single('documents'), async (req, res) => {
     const name = String(req.body.name ?? '')
     const phone = String(req.body.phone ?? '')
     const occupation = String(req.body.occupation ?? '')
+    const address = String(req.body.address ?? '')
     const cardId = String(req.body.cardID ?? '')
     const cardPayload = String(req.body.cardPayload ?? '{}')
 
-    if (!name || !phone || !occupation || !cardId) {
+    if (!name || !phone || !occupation || !address || !cardId) {
       res.status(400).json({ ok: false, error: 'Missing required fields' })
       return
     }
 
     const id = `sub-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
     const createdAt = new Date().toISOString()
-    const documentPath = req.file ? `/uploads/${req.file.filename}` : null
+    const documentPaths = Array.isArray(req.files)
+      ? req.files.map((f) => `/uploads/${f.filename}`)
+      : []
 
     const stmt = uploadDb.prepare(
-      'INSERT INTO submissions (id, name, phone, occupation, card_id, card_payload, document_path, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?);',
+      'INSERT INTO submissions (id, name, phone, occupation, address, card_id, card_payload, document_path, created_at, decision, decided_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
     )
-    stmt.run([id, name, phone, occupation, cardId, cardPayload, documentPath, createdAt])
+    stmt.run([id, name, phone, occupation, address, cardId, cardPayload, JSON.stringify(documentPaths), createdAt])
     stmt.free()
 
     await persistUploadDb()
@@ -172,13 +221,109 @@ app.post('/api/upload', upload.single('documents'), async (req, res) => {
         name,
         phone,
         occupation,
+        address,
         cardId,
-        documentPath,
+        documentPaths,
         createdAt,
       },
     })
   } catch (cause) {
     res.status(500).json({ ok: false, error: cause instanceof Error ? cause.message : 'Upload failed' })
+  }
+})
+
+app.get('/api/admin/submissions', async (_req, res) => {
+  try {
+    if (!uploadDb) {
+      res.status(500).json({ ok: false, error: 'Upload DB not initialized' })
+      return
+    }
+
+    const result = uploadDb.exec(
+      'SELECT id, name, phone, occupation, address, card_id, card_payload, document_path, created_at, decision, decided_at FROM submissions ORDER BY created_at DESC;',
+    )
+    const rows = result[0]?.values ?? []
+    const submissions = rows.map(mapSubmissionRow).map((row) => ({
+      id: row.id,
+      name: row.name,
+      phone: row.phone,
+      occupation: row.occupation,
+      address: row.address,
+      cardId: row.cardId,
+      createdAt: row.createdAt,
+      decision: row.decision,
+    }))
+    res.json({ ok: true, submissions })
+  } catch (cause) {
+    res.status(500).json({ ok: false, error: cause instanceof Error ? cause.message : 'Failed to list submissions' })
+  }
+})
+
+app.get('/api/admin/submissions/:id', async (req, res) => {
+  try {
+    if (!uploadDb) {
+      res.status(500).json({ ok: false, error: 'Upload DB not initialized' })
+      return
+    }
+
+    const stmt = uploadDb.prepare(
+      'SELECT id, name, phone, occupation, address, card_id, card_payload, document_path, created_at, decision, decided_at FROM submissions WHERE id = ? LIMIT 1;',
+    )
+    stmt.bind([String(req.params.id)])
+    if (!stmt.step()) {
+      stmt.free()
+      res.status(404).json({ ok: false, error: 'Submission not found' })
+      return
+    }
+    const row = stmt.get()
+    stmt.free()
+    const submission = mapSubmissionRow(row)
+    res.json({ ok: true, submission })
+  } catch (cause) {
+    res.status(500).json({ ok: false, error: cause instanceof Error ? cause.message : 'Failed to load submission' })
+  }
+})
+
+app.post('/api/admin/submissions/:id/decision', async (req, res) => {
+  try {
+    if (!uploadDb) {
+      res.status(500).json({ ok: false, error: 'Upload DB not initialized' })
+      return
+    }
+
+    const decision = String(req.body?.decision ?? '').toLowerCase()
+    if (decision !== 'verified' && decision !== 'invalid') {
+      res.status(400).json({ ok: false, error: 'Invalid decision value' })
+      return
+    }
+
+    const decidedAt = new Date().toISOString()
+    const stmt = uploadDb.prepare('UPDATE submissions SET decision = ?, decided_at = ? WHERE id = ?;')
+    stmt.run([decision, decidedAt, String(req.params.id)])
+    stmt.free()
+    await persistUploadDb()
+
+    res.json({ ok: true })
+  } catch (cause) {
+    res.status(500).json({ ok: false, error: cause instanceof Error ? cause.message : 'Failed to save decision' })
+  }
+})
+
+app.delete('/api/admin/submissions/:id', async (req, res) => {
+  try {
+    if (!uploadDb) {
+      res.status(500).json({ ok: false, error: 'Upload DB not initialized' })
+      return
+    }
+
+    const stmt = uploadDb.prepare('DELETE FROM submissions WHERE id = ?;')
+    stmt.run([String(req.params.id)])
+    stmt.free()
+    await persistUploadDb()
+
+    res.json({ ok: true })
+  } catch (cause) {
+    res.status(500).json({ ok: false, error: cause instanceof Error ? cause.message : 'Failed to delete submission' })
   }
 })
 

@@ -2,8 +2,7 @@ import { useMemo, useRef } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Line, OrbitControls, Stars, Text } from '@react-three/drei'
 import * as THREE from 'three'
-import type { RecordEntry } from './DatabaseTab'
-import { buildGraphFromRecords, type GraphNodeData } from '../lib/graphData'
+import { buildGraphFromRecords, type GraphNodeData, type RecordEntry } from '../lib/graphData'
 
 type GraphTabProps = {
   database: RecordEntry[]

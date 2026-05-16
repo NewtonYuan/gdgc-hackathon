@@ -1,4 +1,9 @@
-import type { RecordEntry } from '../components/DatabaseTab'
+export type RecordEntry = {
+  name: string
+  role: string
+  district: string
+  status: 'Verified' | 'Missing' | 'Corrupted' | 'Trusted' | 'Unverified'
+}
 
 export type GraphStatusBucket = 'verified' | 'in-process' | 'not-verified'
 

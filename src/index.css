@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+
 :root {
   --bg: #050505;
   --bg-soft: #0e0e0e;
@@ -17,11 +19,10 @@ body {
   margin: 0;
   background: #000000;
   color: var(--text);
-  font-family: 'Press Start 2P', 'VT323', 'Courier New', monospace;
-  image-rendering: pixelated;
-  text-rendering: geometricPrecision;
-  -webkit-font-smoothing: none;
-  font-smooth: never;
+  font-family: 'Roboto', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
