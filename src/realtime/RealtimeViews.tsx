@@ -635,7 +635,9 @@ export function PhoneRealtimeView() {
       return null;
     }
   });
-  const [connection, setConnection] = useState("connecting");
+  const [connection, setConnection] = useState(() =>
+    mockStatus ? "connected" : "connecting",
+  );
   const [result, setResult] = useState<{
     verified: boolean;
     name: string;

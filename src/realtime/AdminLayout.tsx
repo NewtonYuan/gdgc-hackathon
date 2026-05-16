@@ -117,5 +117,5 @@ export default function AdminLayout({
         </div>
       </section>
     </main>
-  );
+  )
 }

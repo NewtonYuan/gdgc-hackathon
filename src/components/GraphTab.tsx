@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Billboard, Line, OrbitControls, Stars, Text } from '@react-three/drei'
 import * as THREE from 'three'
@@ -291,11 +291,8 @@ function GraphTab({ graph }: GraphTabProps) {
     [graph.nodes, hiddenNodeIds],
   )
 
-  useEffect(() => {
-    if (selectedNode && hiddenNodeIds.includes(selectedNode.id)) {
-      setSelectedNode(null)
-    }
-  }, [hiddenNodeIds, selectedNode])
+  const activeSelectedNode =
+    selectedNode && !hiddenNodeIds.includes(selectedNode.id) ? selectedNode : null
 
   function hideNode(nodeId: string) {
     setHiddenNodeIds((current) => (current.includes(nodeId) ? current : [...current, nodeId]))
@@ -363,7 +360,7 @@ function GraphTab({ graph }: GraphTabProps) {
         ) : null}
       </section>
 
-      <div className={`graph-layout ${selectedNode ? 'sidebar-open' : ''}`}>
+      <div className={`graph-layout ${activeSelectedNode ? 'sidebar-open' : ''}`}>
         <div className="graph-stage star-map" aria-label="Recovered people graph visualization">
           <Canvas
             className="graph-canvas"
@@ -375,76 +372,76 @@ function GraphTab({ graph }: GraphTabProps) {
           </Canvas>
         </div>
 
-        {selectedNode ? (
+        {activeSelectedNode ? (
           <aside className="graph-inspector" aria-label="Selected person details">
-            <p className={`graph-status-pill ${selectedNode.statusBucket}`}>
-              {selectedNode.person.verificationStatus.replace('-', ' ')}
+            <p className={`graph-status-pill ${activeSelectedNode.statusBucket}`}>
+              {activeSelectedNode.person.verificationStatus.replace('-', ' ')}
             </p>
-            <h3 className="graph-person-code">{selectedNode.shortLabel}</h3>
-            <p className="graph-person-name">{selectedNode.person.fullName}</p>
+            <h3 className="graph-person-code">{activeSelectedNode.shortLabel}</h3>
+            <p className="graph-person-name">{activeSelectedNode.person.fullName}</p>
 
             <dl className="graph-person-meta">
               <div>
                 <dt>Age</dt>
-                <dd>{selectedNode.person.age}</dd>
+                <dd>{activeSelectedNode.person.age}</dd>
               </div>
               <div>
                 <dt>Gender</dt>
-                <dd>{selectedNode.person.gender}</dd>
+                <dd>{activeSelectedNode.person.gender}</dd>
               </div>
               <div>
                 <dt>Status</dt>
-                <dd>{selectedNode.person.verificationStatus}</dd>
+                <dd>{activeSelectedNode.person.verificationStatus}</dd>
               </div>
               <div>
                 <dt>Trust Score</dt>
-                <dd>{selectedNode.person.trustScore}</dd>
+                <dd>{activeSelectedNode.person.trustScore}</dd>
               </div>
               <div>
                 <dt>Address</dt>
-                <dd>{`${selectedNode.person.street}, ${selectedNode.person.city}, ${selectedNode.person.country}`}</dd>
+                <dd>{`${activeSelectedNode.person.street}, ${activeSelectedNode.person.city}, ${activeSelectedNode.person.country}`}</dd>
               </div>
               <div>
                 <dt>Occupation Type</dt>
-                <dd>{selectedNode.person.occupationType}</dd>
+                <dd>{activeSelectedNode.person.occupationType}</dd>
               </div>
-              {selectedNode.person.employment ? (
+              {activeSelectedNode.person.employment ? (
                 <div>
                   <dt>Employment</dt>
                   <dd>
-                    {selectedNode.person.employment.jobTitle}
+                    {activeSelectedNode.person.employment.jobTitle}
                     <br />
-                    {selectedNode.person.employment.employer}
+                    {activeSelectedNode.person.employment.employer}
                   </dd>
                 </div>
               ) : null}
-              {selectedNode.person.student ? (
+              {activeSelectedNode.person.student ? (
                 <div>
                   <dt>Student</dt>
                   <dd>
-                    {selectedNode.person.student.institution}
+                    {activeSelectedNode.person.student.institution}
                     <br />
-                    {selectedNode.person.student.fieldOfStudy}
+                    {activeSelectedNode.person.student.fieldOfStudy}
                   </dd>
                 </div>
               ) : null}
-              {selectedNode.person.retired ? (
+              {activeSelectedNode.person.retired ? (
                 <div>
                   <dt>Former Occupation</dt>
-                  <dd>{selectedNode.person.retired.formerOccupation ?? 'Unknown'}</dd>
+                  <dd>{activeSelectedNode.person.retired.formerOccupation ?? 'Unknown'}</dd>
                 </div>
               ) : null}
               <div>
                 <dt>Visibility</dt>
                 <dd>
-                  <button type="button" className="graph-hide-button" onClick={() => hideNode(selectedNode.id)}>
+                  <button type="button" className="graph-hide-button" onClick={() => hideNode(activeSelectedNode.id)}>
                     Hide This Node
                   </button>
                 </dd>
               </div>
               <div>
                 <dt>Database Object</dt>
-                <dd>{JSON.stringify(selectedNode.person)}</dd>
+                <dd>{JSON.stringify(activeSelectedNode.person)}</dd>
               </div>
             </dl>
           </aside>
@@ -453,7 +450,7 @@ function GraphTab({ graph }: GraphTabProps) {
 
       <div className="graph-notes">
         <p>
-          <span>Node rule</span> 3D spheres represent citizens loaded from `verify_deny.db`.
+          <span>Node rule</span> 3D spheres represent citizens loaded from `records.db`.
         </p>
         <p>
           <span>Color rule</span> Colors come from each citizen's `verification_status`.

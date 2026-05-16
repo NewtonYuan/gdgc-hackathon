@@ -18,9 +18,8 @@ const clients = new Map()
 
 const dataDir = path.join(__dirname, 'data')
 const uploadsDir = path.join(__dirname, 'uploads')
-const uploadDbPath = path.join(dataDir, 'records.db')
-const verifyDenyDbPath = path.join(dataDir, 'verify_deny.db')
-let uploadDb = null
+const recordsDbPath = path.join(dataDir, 'records.db')
+let recordsDb = null
 let SQL = null
 
 function createServerId() {
@@ -38,40 +37,87 @@ function sendJson(ws, payload) {
 
 function mapSubmissionRow(row) {
   let status = row[9] ? String(row[9]).toLowerCase() : 'pending'
-  if (status === 'accepted') {
-    status = 'verified'
-  }
-  if (status === 'declined') {
+  if (status === 'denied') {
     status = 'invalid'
+  }
+  if (status === 'unverified') {
+    status = 'pending'
   }
   if (status !== 'pending' && status !== 'verified' && status !== 'invalid') {
     status = 'pending'
   }
+  let documentPath = null
+  if (row[7]) {
+    const rawDocumentPath = String(row[7])
+    try {
+      const parsed = JSON.parse(rawDocumentPath)
+      documentPath = Array.isArray(parsed) && parsed.length > 0 ? String(parsed[0]) : null
+    } catch {
+      documentPath = rawDocumentPath
+    }
+  }
 
   return {
     id: String(row[0]),
-    name: String(row[1]),
-    phone: String(row[2]),
-    occupation: String(row[3]),
+    citizenId: String(row[0]),
+    name: String(row[1] ?? ''),
+    phone: String(row[2] ?? ''),
+    occupation: String(row[3] ?? ''),
     address: String(row[4] ?? ''),
     cardId: String(row[5]),
     cardPayload: String(row[6] ?? '{}'),
-    documentPath: row[7] ? String(row[7]) : null,
+    documentPath,
     createdAt: String(row[8]),
     decision: status,
     decidedAt: row[10] ? String(row[10]) : null,
   }
 }
 
-async function persistUploadDb() {
-  if (!uploadDb) {
-    return
+function mapCitizenRow(row) {
+  return {
+    id: String(row[0]),
+    cardId: String(row[1]),
+    name: String(row[2]),
+    phone: String(row[3]),
+    age: row[4] == null ? null : Number(row[4]),
+    gender: row[5] == null ? null : String(row[5]),
+    address: String(row[6]),
+    occupation: String(row[7]),
+    verificationStatus: String(row[8]),
+    trustScore: Number(row[9]),
+    createdAt: String(row[10]),
   }
-  const bytes = uploadDb.export()
-  await fs.writeFile(uploadDbPath, Buffer.from(bytes))
 }
 
-async function initUploadDb() {
+function mapDocumentRow(row) {
+  return {
+    type: String(row[0]),
+    documentNumber: String(row[1]),
+    issuedDate: String(row[2]),
+    expiryDate: row[3] ? String(row[3]) : null,
+    issuingAuthority: String(row[4]),
+  }
+}
+
+function calculateInitialTrustScore({ name, phone, occupation, address, documentCount }) {
+  let score = 8
+  if (name.trim()) score += 4
+  if (phone.trim()) score += 4
+  if (occupation.trim()) score += 3
+  if (address.trim()) score += 4
+  score += Math.min(documentCount, 3) * 5
+  return Math.min(score, 35)
+}
+
+async function persistRecordsDb() {
+  if (!recordsDb) {
+    return
+  }
+  const bytes = recordsDb.export()
+  await fs.writeFile(recordsDbPath, Buffer.from(bytes))
+}
+
+async function initRecordsDb() {
   await fs.mkdir(dataDir, { recursive: true })
   await fs.mkdir(uploadsDir, { recursive: true })
 
@@ -83,46 +129,14 @@ async function initUploadDb() {
 
   let bytes = null
   try {
-    bytes = await fs.readFile(uploadDbPath)
+    bytes = await fs.readFile(recordsDbPath)
   } catch {
     bytes = null
   }
 
-  uploadDb = bytes ? new SQL.Database(new Uint8Array(bytes)) : new SQL.Database()
+  recordsDb = bytes ? new SQL.Database(new Uint8Array(bytes)) : new SQL.Database()
 
-  uploadDb.exec(`
-    CREATE TABLE IF NOT EXISTS submissions (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      phone TEXT NOT NULL,
-      occupation TEXT NOT NULL,
-      address TEXT NOT NULL,
-      card_id TEXT NOT NULL,
-      card_payload TEXT NOT NULL,
-      document_path TEXT,
-      created_at TEXT NOT NULL,
-      decision TEXT,
-      decided_at TEXT
-    );
-  `)
-
-  // Migrations for older DB files.
-  const columns = uploadDb.exec('PRAGMA table_info(submissions);')
-  const colNames = columns.length > 0 ? columns[0].values.map((row) => String(row[1])) : []
-  if (!colNames.includes('address')) {
-    uploadDb.exec("ALTER TABLE submissions ADD COLUMN address TEXT NOT NULL DEFAULT '';")
-  }
-  if (!colNames.includes('decision')) {
-    uploadDb.exec('ALTER TABLE submissions ADD COLUMN decision TEXT;')
-  }
-  if (!colNames.includes('decided_at')) {
-    uploadDb.exec('ALTER TABLE submissions ADD COLUMN decided_at TEXT;')
-  }
-  uploadDb.exec("UPDATE submissions SET decision = 'verified' WHERE lower(decision) = 'accepted';")
-  uploadDb.exec("UPDATE submissions SET decision = 'invalid' WHERE lower(decision) = 'declined';")
-  uploadDb.exec("UPDATE submissions SET decision = 'pending' WHERE decision IS NULL OR trim(decision) = '';")
-
-  await persistUploadDb()
+  await persistRecordsDb()
 }
 
 function mapGraphStatus(status) {
@@ -137,116 +151,133 @@ function mapGraphStatus(status) {
   return 'not-verified'
 }
 
-async function loadVerifyDenyGraph() {
-  if (!SQL) {
-    SQL = await initSqlJs({
-      locateFile: (file) => path.join(__dirname, 'node_modules', 'sql.js', 'dist', file),
-    })
+function splitName(name) {
+  const parts = String(name ?? '').trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) {
+    return { firstName: 'Unknown', lastName: 'Citizen' }
   }
+  if (parts.length === 1) {
+    return { firstName: parts[0], lastName: '' }
+  }
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(' '),
+  }
+}
 
-  const bytes = await fs.readFile(verifyDenyDbPath)
-  const db = new SQL.Database(new Uint8Array(bytes))
+function splitAddress(address) {
+  const parts = String(address ?? '').split(',').map((part) => part.trim()).filter(Boolean)
+  return {
+    street: parts[0] ?? '',
+    city: parts[1] ?? '',
+    country: parts.slice(2).join(', '),
+  }
+}
 
-  try {
-    const citizenResult = db.exec(`
-      SELECT
-        c.id,
-        c.first_name,
-        c.last_name,
-        c.age,
-        c.gender,
-        c.photo_url,
-        c.street,
-        c.city,
-        c.country,
-        c.occupation_type,
-        c.verification_status,
-        c.trust_score,
-        c.created_at,
-        ed.job_title,
-        ed.employer,
-        ed.work_address,
-        sd.institution,
-        sd.student_id,
-        sd.field_of_study,
-        sd.year_of_study,
-        rd.former_occupation
-      FROM citizens c
-      LEFT JOIN employment_details ed ON ed.citizen_id = c.id
-      LEFT JOIN student_details sd ON sd.citizen_id = c.id
-      LEFT JOIN retired_details rd ON rd.citizen_id = c.id
-      ORDER BY c.first_name, c.last_name;
-    `)
+function initials(firstName, lastName) {
+  const first = firstName.charAt(0).toUpperCase() || '?'
+  const last = lastName.charAt(0).toUpperCase() || first
+  return `${first}.${last}`
+}
 
-    const edgeResult = db.exec(`
-      SELECT citizen_a_id, citizen_b_id, relationship, strength
-      FROM connections
-      ORDER BY strength DESC, citizen_a_id, citizen_b_id;
-    `)
+function loadRecordsGraph() {
+  const citizenResult = recordsDb.exec(`
+    SELECT
+      c.id,
+      c.card_id,
+      c.name,
+      c.phone,
+      c.age,
+      c.gender,
+      c.address,
+      c.occupation,
+      c.verification_status,
+      c.trust_score,
+      c.created_at,
+      ed.job_title,
+      ed.employer,
+      ed.work_address,
+      sd.institution,
+      sd.student_id,
+      sd.field_of_study,
+      sd.year_of_study,
+      rd.former_occupation
+    FROM citizens c
+    LEFT JOIN employment_details ed ON ed.citizen_id = c.id
+    LEFT JOIN student_details sd ON sd.citizen_id = c.id
+    LEFT JOIN retired_details rd ON rd.citizen_id = c.id
+    ORDER BY c.name COLLATE NOCASE, c.card_id COLLATE NOCASE;
+  `)
 
-    const nodes = (citizenResult[0]?.values ?? []).map((row) => {
-      const verificationStatus = String(row[10])
-      const fullName = `${String(row[1])} ${String(row[2])}`
+  const edgeResult = recordsDb.exec(`
+    SELECT citizen_a_id, citizen_b_id, relationship, strength
+    FROM connections
+    ORDER BY strength DESC, citizen_a_id, citizen_b_id;
+  `)
 
-      return {
+  const nodes = (citizenResult[0]?.values ?? []).map((row) => {
+    const name = String(row[2] ?? '').trim() || String(row[1])
+    const { firstName, lastName } = splitName(name)
+    const { street, city, country } = splitAddress(row[6])
+    const verificationStatus = String(row[8])
+    const label = initials(firstName, lastName)
+
+    return {
+      id: String(row[0]),
+      label,
+      shortLabel: label,
+      statusBucket: mapGraphStatus(verificationStatus),
+      person: {
         id: String(row[0]),
-        label: `${String(row[1]).charAt(0)}.${String(row[2]).charAt(0)}`,
-        shortLabel: `${String(row[1]).charAt(0)}.${String(row[2]).charAt(0)}`,
-        statusBucket: mapGraphStatus(verificationStatus),
-        person: {
-          id: String(row[0]),
-          firstName: String(row[1]),
-          lastName: String(row[2]),
-          fullName,
-          age: Number(row[3]),
-          gender: String(row[4]),
-          photoUrl: String(row[5]),
-          street: String(row[6]),
-          city: String(row[7]),
-          country: String(row[8]),
-          occupationType: String(row[9]),
-          verificationStatus,
-          trustScore: Number(row[11]),
-          createdAt: String(row[12]),
-          employment: row[13]
-            ? {
-                jobTitle: String(row[13]),
-                employer: String(row[14]),
-                workAddress: String(row[15]),
-              }
-            : null,
-          student: row[16]
-            ? {
-                institution: String(row[16]),
-                studentId: String(row[17]),
-                fieldOfStudy: String(row[18]),
-                yearOfStudy: Number(row[19]),
-              }
-            : null,
-          retired: row[20]
-            ? {
-                formerOccupation: String(row[20]),
-              }
-            : null,
-        },
-      }
-    })
+        firstName,
+        lastName,
+        fullName: name,
+        age: row[4] == null ? null : Number(row[4]),
+        gender: row[5] == null ? '' : String(row[5]),
+        photoUrl: '/images/profile-placeholder.png',
+        street,
+        city,
+        country,
+        occupationType: String(row[7] ?? ''),
+        verificationStatus,
+        trustScore: Number(row[9] ?? 0),
+        createdAt: String(row[10] ?? ''),
+        employment: row[11]
+          ? {
+              jobTitle: String(row[11]),
+              employer: String(row[12]),
+              workAddress: String(row[13]),
+            }
+          : null,
+        student: row[14]
+          ? {
+              institution: String(row[14]),
+              studentId: String(row[15]),
+              fieldOfStudy: String(row[16]),
+              yearOfStudy: Number(row[17]),
+            }
+          : null,
+        retired: row[18]
+          ? {
+              formerOccupation: String(row[18]),
+            }
+          : null,
+      },
+    }
+  })
 
-    const edges = (edgeResult[0]?.values ?? []).map((row) => ({
-      id: `${String(row[0])}--${String(row[1])}`,
-      source: String(row[0]),
-      target: String(row[1]),
-      weight: Number(row[3]),
-      relationship: String(row[2]),
-      strength: Number(row[3]),
-      overlapScore: Number(row[3]) * 10,
-      overlapSummary: `${String(row[2])} (${String(row[3])}/10)`,
-    }))
+  const edges = (edgeResult[0]?.values ?? []).map((row) => ({
+    id: `${String(row[0])}--${String(row[1])}`,
+    source: String(row[0]),
+    target: String(row[1]),
+    weight: Number(row[3]),
+    relationship: String(row[2]),
+    strength: Number(row[3]),
+    overlapScore: Number(row[3]) * 10,
+    overlapSummary: `${String(row[2])} (${String(row[3])}/10)`,
+  }))
 
-    return { nodes, edges }
-  } finally {
-    db.close()
-  }
+  return { nodes, edges }
 }
 
 const storage = multer.diskStorage({
@@ -311,41 +342,44 @@ app.use('/uploads', express.static(uploadsDir))
 
 app.post('/api/upload', upload.array('documents'), async (req, res) => {
   try {
-    if (!uploadDb) {
-      res.status(500).json({ ok: false, error: 'Upload DB not initialized' })
+    if (!recordsDb) {
+      res.status(500).json({ ok: false, error: 'Records DB not initialized' })
       return
     }
 
-    const name = String(req.body.name ?? '')
-    const phone = String(req.body.phone ?? '')
-    const occupation = String(req.body.occupation ?? '')
-    const address = String(req.body.address ?? '')
-    const cardId = String(req.body.cardID ?? '')
+    const name = String(req.body.name ?? '').trim()
+    const phone = String(req.body.phone ?? '').trim()
+    const occupation = String(req.body.occupation ?? '').trim()
+    const address = String(req.body.address ?? '').trim()
+    const cardId = String(req.body.cardID ?? '').trim() || createServerId()
     const cardPayload = String(req.body.cardPayload ?? '{}')
 
-    if (!name || !phone || !occupation || !address || !cardId) {
-      res.status(400).json({ ok: false, error: 'Missing required fields' })
-      return
-    }
-
-    const id = `sub-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
+    const citizenId = `cit-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
     const createdAt = new Date().toISOString()
     const documentPaths = Array.isArray(req.files)
       ? req.files.map((f) => `/uploads/${f.filename}`)
       : []
+    const trustScore = calculateInitialTrustScore({
+      name,
+      phone,
+      occupation,
+      address,
+      documentCount: documentPaths.length,
+    })
 
-    const stmt = uploadDb.prepare(
-      'INSERT INTO submissions (id, name, phone, occupation, address, card_id, card_payload, document_path, created_at, decision, decided_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+    const citizenStmt = recordsDb.prepare(
+      'INSERT INTO citizens (id, card_id, name, phone, age, gender, address, occupation, verification_status, trust_score, created_at, profile_source, card_payload, document_path, decided_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
     )
-    stmt.run([id, name, phone, occupation, address, cardId, cardPayload, JSON.stringify(documentPaths), createdAt])
-    stmt.free()
+    citizenStmt.run([citizenId, cardId, name, phone, null, null, address, occupation, 'pending', trustScore, createdAt, 'upload', cardPayload, JSON.stringify(documentPaths), null])
+    citizenStmt.free()
 
-    await persistUploadDb()
+    await persistRecordsDb()
 
     res.json({
       ok: true,
-      id,
+      id: citizenId,
       stored: {
+        citizenId,
         name,
         phone,
         occupation,
@@ -353,6 +387,7 @@ app.post('/api/upload', upload.array('documents'), async (req, res) => {
         cardId,
         documentPaths,
         createdAt,
+        trustScore,
       },
     })
   } catch (cause) {
@@ -362,14 +397,18 @@ app.post('/api/upload', upload.array('documents'), async (req, res) => {
 
 app.get('/api/admin/submissions', async (_req, res) => {
   try {
-    if (!uploadDb) {
-      res.status(500).json({ ok: false, error: 'Upload DB not initialized' })
+    if (!recordsDb) {
+      res.status(500).json({ ok: false, error: 'Records DB not initialized' })
       return
     }
 
-    const result = uploadDb.exec(
-      'SELECT id, name, phone, occupation, address, card_id, card_payload, document_path, created_at, decision, decided_at FROM submissions ORDER BY created_at DESC;',
-    )
+    const result = recordsDb.exec(`
+      SELECT id, name, phone, occupation, address, card_id, card_payload,
+             document_path, created_at, verification_status, decided_at
+      FROM citizens
+      WHERE profile_source = 'upload'
+      ORDER BY created_at DESC;
+    `)
     const rows = result[0]?.values ?? []
     const submissions = rows.map(mapSubmissionRow).map((row) => ({
       id: row.id,
@@ -389,27 +428,137 @@ app.get('/api/admin/submissions', async (_req, res) => {
 
 app.get('/api/admin/graph', async (_req, res) => {
   try {
-    const graph = await loadVerifyDenyGraph()
-    res.json({ ok: true, graph })
+    if (!recordsDb) {
+      res.status(500).json({ ok: false, error: 'Records DB not initialized' })
+      return
+    }
+
+    res.json({ ok: true, graph: loadRecordsGraph() })
   } catch (cause) {
     res.status(500).json({ ok: false, error: cause instanceof Error ? cause.message : 'Failed to load graph' })
   }
 })
 
-app.get('/api/admin/submissions/:id', async (req, res) => {
+app.get('/api/citizens', async (_req, res) => {
   try {
-    if (!uploadDb) {
-      res.status(500).json({ ok: false, error: 'Upload DB not initialized' })
+    if (!recordsDb) {
+      res.status(500).json({ ok: false, error: 'Records DB not initialized' })
       return
     }
 
-    const stmt = uploadDb.prepare(
-      'SELECT id, name, phone, occupation, address, card_id, card_payload, document_path, created_at, decision, decided_at FROM submissions WHERE id = ? LIMIT 1;',
+    const result = recordsDb.exec(`
+      SELECT id, card_id, name, phone, age, gender, address, occupation,
+             verification_status, trust_score, created_at
+      FROM citizens
+      ORDER BY name COLLATE NOCASE;
+    `)
+    const citizens = (result[0]?.values ?? []).map(mapCitizenRow)
+    res.json({ ok: true, citizens })
+  } catch (cause) {
+    res.status(500).json({ ok: false, error: cause instanceof Error ? cause.message : 'Failed to load citizens' })
+  }
+})
+
+app.get('/api/citizens/:id', async (req, res) => {
+  try {
+    if (!recordsDb) {
+      res.status(500).json({ ok: false, error: 'Records DB not initialized' })
+      return
+    }
+
+    const citizenStmt = recordsDb.prepare(`
+      SELECT id, card_id, name, phone, age, gender, address, occupation,
+             verification_status, trust_score, created_at
+      FROM citizens
+      WHERE id = ?
+      LIMIT 1;
+    `)
+    citizenStmt.bind([String(req.params.id)])
+    if (!citizenStmt.step()) {
+      citizenStmt.free()
+      res.status(404).json({ ok: false, error: 'Citizen not found' })
+      return
+    }
+    const citizen = mapCitizenRow(citizenStmt.get())
+    citizenStmt.free()
+
+    let occupationDetail = null
+    const employmentStmt = recordsDb.prepare('SELECT job_title, employer, work_address FROM employment_details WHERE citizen_id = ? LIMIT 1;')
+    employmentStmt.bind([citizen.id])
+    if (employmentStmt.step()) {
+      const row = employmentStmt.get()
+      occupationDetail = {
+        jobTitle: String(row[0]),
+        employer: String(row[1]),
+        workAddress: String(row[2]),
+      }
+    }
+    employmentStmt.free()
+
+    if (!occupationDetail) {
+      const stmt = recordsDb.prepare('SELECT institution, student_id, field_of_study, year_of_study FROM student_details WHERE citizen_id = ? LIMIT 1;')
+      stmt.bind([citizen.id])
+      if (stmt.step()) {
+        const row = stmt.get()
+        occupationDetail = {
+          institution: String(row[0]),
+          studentId: String(row[1]),
+          fieldOfStudy: String(row[2]),
+          yearOfStudy: Number(row[3]),
+        }
+      }
+      stmt.free()
+    }
+
+    if (!occupationDetail) {
+      const stmt = recordsDb.prepare('SELECT former_occupation FROM retired_details WHERE citizen_id = ? LIMIT 1;')
+      stmt.bind([citizen.id])
+      if (stmt.step()) {
+        const row = stmt.get()
+        occupationDetail = {
+          formerOccupation: row[0] ? String(row[0]) : null,
+        }
+      }
+      stmt.free()
+    }
+
+    const docsStmt = recordsDb.prepare(`
+      SELECT type, document_number, issued_date, expiry_date, issuing_authority
+      FROM documents
+      WHERE citizen_id = ?
+      ORDER BY issued_date DESC, type COLLATE NOCASE;
+    `)
+    docsStmt.bind([citizen.id])
+    const documents = []
+    while (docsStmt.step()) {
+      documents.push(mapDocumentRow(docsStmt.get()))
+    }
+    docsStmt.free()
+
+    res.json({ ok: true, citizen, occupationDetail, documents })
+  } catch (cause) {
+    res.status(500).json({ ok: false, error: cause instanceof Error ? cause.message : 'Failed to load citizen' })
+  }
+})
+
+app.get('/api/admin/submissions/:id', async (req, res) => {
+  try {
+    if (!recordsDb) {
+      res.status(500).json({ ok: false, error: 'Records DB not initialized' })
+      return
+    }
+
+    const stmt = recordsDb.prepare(
+      `SELECT id, name, phone, occupation, address, card_id, card_payload,
+              document_path, created_at, verification_status, decided_at
+       FROM citizens
+       WHERE id = ?
+       LIMIT 1;`,
     )
     stmt.bind([String(req.params.id)])
     if (!stmt.step()) {
       stmt.free()
-      res.status(404).json({ ok: false, error: 'Submission not found' })
+      res.status(404).json({ ok: false, error: 'Citizen not found' })
       return
     }
     const row = stmt.get()
@@ -423,8 +572,8 @@ app.get('/api/admin/submissions/:id', async (req, res) => {
 
 app.post('/api/admin/submissions/:id/decision', async (req, res) => {
   try {
-    if (!uploadDb) {
-      res.status(500).json({ ok: false, error: 'Upload DB not initialized' })
+    if (!recordsDb) {
+      res.status(500).json({ ok: false, error: 'Records DB not initialized' })
       return
     }
 
@@ -435,10 +584,13 @@ app.post('/api/admin/submissions/:id/decision', async (req, res) => {
     }
 
     const decidedAt = new Date().toISOString()
-    const stmt = uploadDb.prepare('UPDATE submissions SET decision = ?, decided_at = ? WHERE id = ?;')
-    stmt.run([decision, decidedAt, String(req.params.id)])
-    stmt.free()
-    await persistUploadDb()
+    const status = decision === 'verified' ? 'verified' : 'denied'
+    const trustScore = decision === 'verified' ? 55 : 10
+    const citizenStmt = recordsDb.prepare('UPDATE citizens SET verification_status = ?, trust_score = ?, decided_at = ? WHERE id = ?;')
+    citizenStmt.run([status, trustScore, decidedAt, String(req.params.id)])
+    citizenStmt.free()
+
+    await persistRecordsDb()
 
     res.json({ ok: true })
   } catch (cause) {
@@ -448,15 +600,16 @@ app.post('/api/admin/submissions/:id/decision', async (req, res) => {
 
 app.delete('/api/admin/submissions/:id', async (req, res) => {
   try {
-    if (!uploadDb) {
-      res.status(500).json({ ok: false, error: 'Upload DB not initialized' })
+    if (!recordsDb) {
+      res.status(500).json({ ok: false, error: 'Records DB not initialized' })
       return
     }
 
-    const stmt = uploadDb.prepare('DELETE FROM submissions WHERE id = ?;')
+    const stmt = recordsDb.prepare('DELETE FROM citizens WHERE id = ?;')
     stmt.run([String(req.params.id)])
     stmt.free()
-    await persistUploadDb()
+
+    await persistRecordsDb()
 
     res.json({ ok: true })
   } catch (cause) {
@@ -477,7 +630,7 @@ app.get('/{*any}', (_req, res) => {
 
 const port = Number(process.env.PORT ?? 3000)
 
-await initUploadDb()
+await initRecordsDb()
 httpServer.listen(port, () => {
   console.log(`Server listening on http://localhost:${port}`)
 })

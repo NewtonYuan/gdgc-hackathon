@@ -4,6 +4,7 @@ type SubmissionResponse = {
   ok: boolean
   id: string
   stored: {
+    citizenId: string
     name: string
     phone: string
     occupation: string
@@ -11,6 +12,7 @@ type SubmissionResponse = {
     cardId: string
     documentPaths: string[]
     createdAt: string
+    trustScore: number
   }
 }
 
@@ -170,11 +172,6 @@ export default function UploadView() {
   }
 
   const validateForm = (): string | null => {
-    if (!form.name.trim()) return 'Name is required.'
-    if (!form.phone.trim()) return 'Phone is required.'
-    if (!form.occupation.trim()) return 'Occupation is required.'
-    if (!form.address.trim()) return 'Address is required.'
-    if (queue.length === 0) return 'Add at least one document.'
     return null
   }
 
@@ -235,7 +232,7 @@ export default function UploadView() {
       const [id] = await Promise.all([saveToDb(), sleep(1900)])
       window.clearInterval(ticker)
       setQueue((prev) => prev.map((q) => ({ ...q, progress: 100, done: true })))
-      setMessage(`NFC card written. Saved to Upload DB (id: ${id}).`)
+      setMessage(`NFC card written. Saved to records DB (id: ${id}).`)
     } catch (cause) {
       window.clearInterval(ticker)
       setQueue((prev) => prev.map((q) => ({ ...q, progress: 0, done: false })))
@@ -249,6 +246,24 @@ export default function UploadView() {
     }
   }
 
+  const onSaveWithoutNfc = async () => {
+    if (submitting) {
+      return
+    }
+
+    setSubmitting(true)
+    setMessage('')
+    try {
+      const id = await saveToDb()
+      setQueue((prev) => prev.map((q) => ({ ...q, progress: 100, done: true })))
+      setMessage(`Saved to records DB without NFC (id: ${id}).`)
+    } catch (cause) {
+      setMessage(cause instanceof Error ? `Save failed: ${cause.message}` : 'Save failed')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <main className="terminal-shell upload-view">
       <header className="topbar">
@@ -256,26 +271,26 @@ export default function UploadView() {
           Back
         </a>
         <h1>Upload</h1>
-        <p className="tagline">Write card + store applicant details in separate database.</p>
+        <p className="tagline">Write card + store applicant details in records database.</p>
       </header>
 
       <article className="panel">
         <form className="upload-form" onSubmit={(e) => e.preventDefault()}>
           <label>
             Name
-            <input value={form.name} onChange={(e) => onChange('name', e.target.value)} required />
+            <input value={form.name} onChange={(e) => onChange('name', e.target.value)} />
           </label>
           <label>
             Phone
-            <input type="tel" value={form.phone} onChange={(e) => onChange('phone', e.target.value)} required />
+            <input type="tel" value={form.phone} onChange={(e) => onChange('phone', e.target.value)} />
           </label>
           <label>
             Occupation
-            <input value={form.occupation} onChange={(e) => onChange('occupation', e.target.value)} required />
+            <input value={form.occupation} onChange={(e) => onChange('occupation', e.target.value)} />
           </label>
           <label>
             Address
-            <input value={form.address} onChange={(e) => onChange('address', e.target.value)} required />
+            <input value={form.address} onChange={(e) => onChange('address', e.target.value)} />
           </label>
 
           <div className="upload-docs-field">
@@ -365,6 +380,9 @@ export default function UploadView() {
           <div className="actions">
             <button type="button" onClick={onWriteCard} disabled={submitting}>
               {submitting ? 'Working...' : 'Write NFC Card'}
+            </button>
+            <button type="button" className="secondary" onClick={onSaveWithoutNfc} disabled={submitting}>
+              Save Without NFC
             </button>
           </div>
         </form>

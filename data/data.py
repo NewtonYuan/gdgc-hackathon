@@ -1,5 +1,5 @@
 """
-Build verify_deny.db — a pre-seeded SQLite database for the VERIFY//DENY
+Build records.db — a pre-seeded SQLite database for the VERIFY//DENY
 hackathon project. Contains a normalized schema for citizens, their
 occupations, documents, and a symmetric web-of-trust connection graph.
 
@@ -7,22 +7,34 @@ Connections are stored once per pair with citizen_a_id < citizen_b_id,
 enforced by a CHECK constraint, so symmetry is structural — no validation
 needed because asymmetric rows can't physically exist.
 
-Run this once locally to produce verify_deny.db. Open it in DB Browser
+Run this once locally to produce records.db. Open it in DB Browser
 for SQLite to inspect.
 """
 
 import os
 import sqlite3
+import json
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "verify_deny.db")
-
-# Wipe any previous build so re-runs are deterministic
-if os.path.exists(DB_PATH):
-    os.remove(DB_PATH)
+DB_PATH = os.path.join(os.path.dirname(__file__), "records.db")
 
 conn = sqlite3.connect(DB_PATH)
 conn.execute("PRAGMA foreign_keys = ON")
 cur = conn.cursor()
+
+# Wipe any previous build so re-runs are deterministic. Drop tables in-place
+# instead of deleting the database file, which is friendlier on Windows when a
+# DB viewer has a handle open.
+cur.executescript("""
+PRAGMA foreign_keys = OFF;
+DROP TABLE IF EXISTS submissions;
+DROP TABLE IF EXISTS connections;
+DROP TABLE IF EXISTS documents;
+DROP TABLE IF EXISTS employment_details;
+DROP TABLE IF EXISTS student_details;
+DROP TABLE IF EXISTS retired_details;
+DROP TABLE IF EXISTS citizens;
+PRAGMA foreign_keys = ON;
+""")
 
 # ============================================================
 # SCHEMA
@@ -30,22 +42,22 @@ cur = conn.cursor()
 cur.executescript("""
 CREATE TABLE citizens (
   id TEXT PRIMARY KEY,
-  first_name TEXT NOT NULL,
-  last_name TEXT NOT NULL,
-  age INTEGER NOT NULL CHECK (age BETWEEN 5 AND 85),
-  gender TEXT NOT NULL CHECK (gender IN ('male','female','nonbinary')),
-  photo_url TEXT NOT NULL,
-  street TEXT NOT NULL,
-  city TEXT NOT NULL,
-  country TEXT NOT NULL,
-  occupation_type TEXT NOT NULL CHECK (
-    occupation_type IN ('employed','student','unemployed','retired')
-  ),
+  card_id TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  age INTEGER CHECK (age IS NULL OR age BETWEEN 5 AND 85),
+  gender TEXT CHECK (gender IS NULL OR gender IN ('male','female','nonbinary')),
+  address TEXT NOT NULL,
+  occupation TEXT NOT NULL,
   verification_status TEXT NOT NULL CHECK (
     verification_status IN ('verified','unverified','pending','denied')
   ),
   trust_score INTEGER NOT NULL CHECK (trust_score BETWEEN 0 AND 100),
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  profile_source TEXT NOT NULL CHECK (profile_source IN ('seed','upload')),
+  card_payload TEXT,
+  document_path TEXT,
+  decided_at TEXT
 );
 
 CREATE TABLE employment_details (
@@ -142,56 +154,203 @@ ID = {
     "ihaka":    "a7b8c9d0-0025-4000-8000-000000000025",  # Grid Authority apprentice
 }
 
-def photo(cid):
-    return f"https://i.pravatar.cc/150?u={cid}"
+PHONE = {
+    "sarah": "+64 21 555 0101",
+    "david": "+64 21 555 0102",
+    "emily": "+64 21 555 0103",
+    "henry": "+64 21 555 0104",
+    "maia": "+64 21 555 0105",
+    "rawiri": "+64 21 555 0106",
+    "tane": "+64 21 555 0107",
+    "james": "+64 21 555 0108",
+    "priya": "+64 21 555 0109",
+    "liam": "+64 21 555 0110",
+    "aisha": "+64 21 555 0111",
+    "marcus": "+64 21 555 0112",
+    "sophie": "+64 21 555 0113",
+    "kenji": "+64 21 555 0114",
+    "ana": "+64 21 555 0115",
+    "jordan": "+64 21 555 0116",
+    "yusuf": "+64 21 555 0117",
+    "elena": "+64 21 555 0118",
+    "mira": "+64 21 555 0119",
+    "thomas": "+64 21 555 0120",
+    "ben": "+64 21 555 0121",
+    "lucia": "+64 21 555 0122",
+    "samir": "+64 21 555 0123",
+    "freya": "+64 21 555 0124",
+    "ihaka": "+64 21 555 0125",
+}
 
 # ============================================================
 # CITIZENS
-# (id, first_name, last_name, age, gender, photo_url,
-#  street, city, country, occupation_type,
+# (id, name, phone, age, gender, address, occupation,
 #  verification_status, trust_score, created_at)
 # ============================================================
 citizens = [
-    (ID["sarah"],  "Sarah",   "Chen",     42, "female",    photo(ID["sarah"]),  "12 Riverside Ave",  "Auckland", "New Zealand", "employed",   "verified",   88, "2031-02-10T09:00:00Z"),
-    (ID["david"],  "David",   "Chen",     45, "male",      photo(ID["david"]),  "12 Riverside Ave",  "Auckland", "New Zealand", "employed",   "verified",   85, "2031-02-10T09:15:00Z"),
-    (ID["emily"],  "Emily",   "Chen",     17, "female",    photo(ID["emily"]),  "12 Riverside Ave",  "Auckland", "New Zealand", "student",    "verified",   72, "2031-02-10T09:30:00Z"),
-    (ID["henry"],  "Henry",   "Chen",     73, "male",      photo(ID["henry"]),  "14 Riverside Ave",  "Auckland", "New Zealand", "retired",    "verified",   90, "2031-02-11T10:00:00Z"),
+    (ID["sarah"],  "Sarah Chen",      PHONE["sarah"],  42, "female",    "12 Riverside Ave, Auckland, New Zealand",  "employed",   "verified",   88, "2031-02-10T09:00:00Z"),
+    (ID["david"],  "David Chen",      PHONE["david"],  45, "male",      "12 Riverside Ave, Auckland, New Zealand",  "employed",   "verified",   85, "2031-02-10T09:15:00Z"),
+    (ID["emily"],  "Emily Chen",      PHONE["emily"],  17, "female",    "12 Riverside Ave, Auckland, New Zealand",  "student",    "verified",   72, "2031-02-10T09:30:00Z"),
+    (ID["henry"],  "Henry Chen",      PHONE["henry"],  73, "male",      "14 Riverside Ave, Auckland, New Zealand",  "retired",    "verified",   90, "2031-02-11T10:00:00Z"),
 
-    (ID["maia"],   "Maia",    "Te Awa",   38, "female",    photo(ID["maia"]),   "47 Grid Lane",      "Auckland", "New Zealand", "employed",   "verified",   82, "2031-02-12T08:00:00Z"),
-    (ID["rawiri"], "Rawiri",  "Te Awa",   40, "male",      photo(ID["rawiri"]), "47 Grid Lane",      "Auckland", "New Zealand", "employed",   "verified",   80, "2031-02-12T08:15:00Z"),
-    (ID["tane"],   "Tane",    "Te Awa",   12, "male",      photo(ID["tane"]),   "47 Grid Lane",      "Auckland", "New Zealand", "student",    "verified",   65, "2031-02-12T08:30:00Z"),
+    (ID["maia"],   "Maia Te Awa",     PHONE["maia"],   38, "female",    "47 Grid Lane, Auckland, New Zealand",      "employed",   "verified",   82, "2031-02-12T08:00:00Z"),
+    (ID["rawiri"], "Rawiri Te Awa",   PHONE["rawiri"], 40, "male",      "47 Grid Lane, Auckland, New Zealand",      "employed",   "verified",   80, "2031-02-12T08:15:00Z"),
+    (ID["tane"],   "Tane Te Awa",     PHONE["tane"],   12, "male",      "47 Grid Lane, Auckland, New Zealand",      "student",    "verified",   65, "2031-02-12T08:30:00Z"),
 
-    (ID["james"],  "James",   "Okonkwo",  51, "male",      photo(ID["james"]),  "88 Harbor Rd",      "Auckland", "New Zealand", "employed",   "verified",   92, "2031-02-13T11:00:00Z"),
-    (ID["priya"],  "Priya",   "Sharma",   34, "female",    photo(ID["priya"]),  "15 Northshore Dr",  "Auckland", "New Zealand", "employed",   "verified",   86, "2031-02-13T11:30:00Z"),
-    (ID["liam"],   "Liam",    "O'Brien",  29, "male",      photo(ID["liam"]),   "22 Northshore Dr",  "Auckland", "New Zealand", "employed",   "verified",   78, "2031-02-14T09:00:00Z"),
-    (ID["aisha"],  "Aisha",   "Hassan",   31, "female",    photo(ID["aisha"]),  "24 Northshore Dr",  "Auckland", "New Zealand", "employed",   "verified",   81, "2031-02-14T09:30:00Z"),
+    (ID["james"],  "James Okonkwo",   PHONE["james"],  51, "male",      "88 Harbor Rd, Auckland, New Zealand",      "employed",   "verified",   92, "2031-02-13T11:00:00Z"),
+    (ID["priya"],  "Priya Sharma",    PHONE["priya"],  34, "female",    "15 Northshore Dr, Auckland, New Zealand",  "employed",   "verified",   86, "2031-02-13T11:30:00Z"),
+    (ID["liam"],   "Liam O'Brien",    PHONE["liam"],   29, "male",      "22 Northshore Dr, Auckland, New Zealand",  "employed",   "verified",   78, "2031-02-14T09:00:00Z"),
+    (ID["aisha"],  "Aisha Hassan",    PHONE["aisha"],  31, "female",    "24 Northshore Dr, Auckland, New Zealand",  "employed",   "verified",   81, "2031-02-14T09:30:00Z"),
 
-    (ID["marcus"], "Marcus",  "Hale",     46, "male",      photo(ID["marcus"]), "49 Grid Lane",      "Auckland", "New Zealand", "employed",   "verified",   84, "2031-02-15T10:00:00Z"),
-    (ID["sophie"], "Sophie",  "Larsen",   39, "female",    photo(ID["sophie"]), "51 Grid Lane",      "Auckland", "New Zealand", "employed",   "verified",   79, "2031-02-15T10:30:00Z"),
-    (ID["kenji"],  "Kenji",   "Nakamura", 52, "male",      photo(ID["kenji"]),  "53 Grid Lane",      "Auckland", "New Zealand", "employed",   "verified",   83, "2031-02-15T11:00:00Z"),
+    (ID["marcus"], "Marcus Hale",     PHONE["marcus"], 46, "male",      "49 Grid Lane, Auckland, New Zealand",      "employed",   "verified",   84, "2031-02-15T10:00:00Z"),
+    (ID["sophie"], "Sophie Larsen",   PHONE["sophie"], 39, "female",    "51 Grid Lane, Auckland, New Zealand",      "employed",   "verified",   79, "2031-02-15T10:30:00Z"),
+    (ID["kenji"],  "Kenji Nakamura",  PHONE["kenji"],  52, "male",      "53 Grid Lane, Auckland, New Zealand",      "employed",   "verified",   83, "2031-02-15T11:00:00Z"),
 
-    (ID["ana"],    "Ana",     "Silva",    20, "female",    photo(ID["ana"]),    "5 Old Town Rd",     "Auckland", "New Zealand", "student",    "verified",   68, "2031-02-16T09:00:00Z"),
-    (ID["jordan"], "Jordan",  "Mitchell", 21, "nonbinary", photo(ID["jordan"]), "7 Old Town Rd",     "Auckland", "New Zealand", "student",    "pending",    55, "2031-02-16T09:30:00Z"),
-    (ID["yusuf"],  "Yusuf",   "Karimi",   23, "male",      photo(ID["yusuf"]),  "9 Old Town Rd",     "Auckland", "New Zealand", "student",    "unverified", 40, "2031-02-16T10:00:00Z"),
-    (ID["elena"],  "Elena",   "Vasquez",  58, "female",    photo(ID["elena"]),  "10 Old Town Rd",    "Auckland", "New Zealand", "employed",   "verified",   89, "2031-02-16T10:30:00Z"),
+    (ID["ana"],    "Ana Silva",       PHONE["ana"],    20, "female",    "5 Old Town Rd, Auckland, New Zealand",     "student",    "verified",   68, "2031-02-16T09:00:00Z"),
+    (ID["jordan"], "Jordan Mitchell", PHONE["jordan"], 21, "nonbinary", "7 Old Town Rd, Auckland, New Zealand",     "student",    "pending",    55, "2031-02-16T09:30:00Z"),
+    (ID["yusuf"],  "Yusuf Karimi",    PHONE["yusuf"],  23, "male",      "9 Old Town Rd, Auckland, New Zealand",     "student",    "unverified", 40, "2031-02-16T10:00:00Z"),
+    (ID["elena"],  "Elena Vasquez",   PHONE["elena"],  58, "female",    "10 Old Town Rd, Auckland, New Zealand",    "employed",   "verified",   89, "2031-02-16T10:30:00Z"),
 
-    (ID["mira"],   "Mira",    "Joshi",    27, "female",    photo(ID["mira"]),   "101 Quay St",       "Auckland", "New Zealand", "unemployed", "unverified", 30, "2031-02-17T12:00:00Z"),
-    (ID["thomas"], "Thomas",  "Wright",   67, "male",      photo(ID["thomas"]), "203 Pier Lane",     "Auckland", "New Zealand", "retired",    "denied",     15, "2031-02-17T12:30:00Z"),
+    (ID["mira"],   "Mira Joshi",      PHONE["mira"],   27, "female",    "101 Quay St, Auckland, New Zealand",       "unemployed", "unverified", 30, "2031-02-17T12:00:00Z"),
+    (ID["thomas"], "Thomas Wright",   PHONE["thomas"], 67, "male",      "203 Pier Lane, Auckland, New Zealand",     "retired",    "denied",     15, "2031-02-17T12:30:00Z"),
 
-    (ID["ben"],    "Ben",     "Chen",     35, "male",      photo(ID["ben"]),    "8 Riverside Ave",   "Auckland", "New Zealand", "employed",   "verified",   77, "2031-02-18T08:00:00Z"),
-    (ID["lucia"],  "Lucia",   "Romano",   28, "female",    photo(ID["lucia"]),  "26 Northshore Dr",  "Auckland", "New Zealand", "employed",   "verified",   75, "2031-02-18T08:30:00Z"),
-    (ID["samir"],  "Samir",   "Patel",    44, "male",      photo(ID["samir"]),  "17 Northshore Dr",  "Auckland", "New Zealand", "employed",   "verified",   87, "2031-02-18T09:00:00Z"),
-    (ID["freya"],  "Freya",   "Andersen", 31, "female",    photo(ID["freya"]),  "55 Grid Lane",      "Auckland", "New Zealand", "employed",   "verified",   76, "2031-02-18T09:30:00Z"),
-    (ID["ihaka"],  "Ihaka",   "Walker",   24, "male",      photo(ID["ihaka"]),  "57 Grid Lane",      "Auckland", "New Zealand", "employed",   "verified",   62, "2031-02-18T10:00:00Z"),
+    (ID["ben"],    "Ben Chen",        PHONE["ben"],    35, "male",      "8 Riverside Ave, Auckland, New Zealand",   "employed",   "verified",   77, "2031-02-18T08:00:00Z"),
+    (ID["lucia"],  "Lucia Romano",    PHONE["lucia"],  28, "female",    "26 Northshore Dr, Auckland, New Zealand",  "employed",   "verified",   75, "2031-02-18T08:30:00Z"),
+    (ID["samir"],  "Samir Patel",     PHONE["samir"],  44, "male",      "17 Northshore Dr, Auckland, New Zealand",  "employed",   "verified",   87, "2031-02-18T09:00:00Z"),
+    (ID["freya"],  "Freya Andersen",  PHONE["freya"],  31, "female",    "55 Grid Lane, Auckland, New Zealand",      "employed",   "verified",   76, "2031-02-18T09:30:00Z"),
+    (ID["ihaka"],  "Ihaka Walker",    PHONE["ihaka"],  24, "male",      "57 Grid Lane, Auckland, New Zealand",      "employed",   "verified",   62, "2031-02-18T10:00:00Z"),
+]
+
+def card_payload(card_id, name, phone, occupation, address):
+    return json.dumps({
+        "card_id": card_id,
+        "name": name,
+        "phone": phone,
+        "occupation": occupation,
+        "address": address,
+    }, separators=(",", ":"))
+
+citizen_rows = []
+for (cid, name, phone, age, gender, address, occupation,
+     verification_status, trust_score, created_at) in citizens:
+    card_id = f"seed-card-{cid[-12:]}"
+    citizen_rows.append((
+        cid,
+        card_id,
+        name,
+        phone,
+        age,
+        gender,
+        address,
+        occupation,
+        verification_status,
+        trust_score,
+        created_at,
+        "seed",
+        card_payload(card_id, name, phone, occupation, address),
+        None,
+        None,
+    ))
+
+cur.executemany("""
+  INSERT INTO citizens
+    (id, card_id, name, phone, age, gender, address, occupation,
+     verification_status, trust_score, created_at, profile_source, card_payload,
+     document_path, decided_at)
+  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+""", citizen_rows)
+
+# ============================================================
+# DUMMY UPLOADS
+# Recently submitted profiles that are not yet verified by the
+# connection graph. These appear in the submissions dashboard and
+# as low-trust pending citizens.
+# ============================================================
+dummy_uploads = [
+    {
+        "citizen_id": "cit-demo-amara-singh",
+        "name": "Amara Singh",
+        "phone": "+64 21 555 3101",
+        "occupation": "Civil Engineer",
+        "address": "18 Karaka Street, Auckland",
+        "card_id": "demo-card-amara-singh",
+        "created_at": "2026-05-16T08:03:09.118Z",
+        "trust_score": 23,
+    },
+    {
+        "citizen_id": "cit-demo-noah-patel",
+        "name": "Noah Patel",
+        "phone": "+64 21 555 3102",
+        "occupation": "Paramedic",
+        "address": "4 Harbour View Road, Auckland",
+        "card_id": "demo-card-noah-patel",
+        "created_at": "2026-05-16T08:03:09.155Z",
+        "trust_score": 23,
+    },
+    {
+        "citizen_id": "cit-demo-elena-morales",
+        "name": "Elena Morales",
+        "phone": "+64 21 555 3103",
+        "occupation": "Logistics Clerk",
+        "address": "",
+        "card_id": "demo-card-elena-morales",
+        "created_at": "2026-05-16T08:03:09.194Z",
+        "trust_score": 19,
+    },
+    {
+        "citizen_id": "cit-demo-wiremu-clarke",
+        "name": "Wiremu Clarke",
+        "phone": "",
+        "occupation": "Student",
+        "address": "31 Grid Lane, Auckland",
+        "card_id": "demo-card-wiremu-clarke",
+        "created_at": "2026-05-16T08:03:09.230Z",
+        "trust_score": 19,
+    },
+    {
+        "citizen_id": "cit-demo-hana-kim",
+        "name": "Hana Kim",
+        "phone": "+64 21 555 3105",
+        "occupation": "Pharmacy Assistant",
+        "address": "12 Northshore Drive, Auckland",
+        "card_id": "demo-card-hana-kim",
+        "created_at": "2026-05-16T08:03:09.266Z",
+        "trust_score": 23,
+    },
+    {
+        "citizen_id": "cit-demo-unknown-worker",
+        "name": "",
+        "phone": "+64 21 555 3106",
+        "occupation": "Warehouse Worker",
+        "address": "88 Civic Square, Auckland",
+        "card_id": "demo-card-unknown-worker",
+        "created_at": "2026-05-16T08:03:09.301Z",
+        "trust_score": 19,
+    },
 ]
 
 cur.executemany("""
   INSERT INTO citizens
-    (id, first_name, last_name, age, gender, photo_url,
-     street, city, country, occupation_type,
-     verification_status, trust_score, created_at)
-  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-""", citizens)
+    (id, card_id, name, phone, age, gender, address, occupation,
+     verification_status, trust_score, created_at, profile_source, card_payload,
+     document_path, decided_at)
+  VALUES (:citizen_id, :card_id, :name, :phone, NULL, NULL, :address,
+          :occupation, 'pending', :trust_score, :created_at, 'upload', :card_payload,
+          '[]', NULL)
+""", [
+    {
+        **upload,
+        "card_payload": json.dumps({
+            "card_id": upload["card_id"],
+            "name": upload["name"],
+            "phone": upload["phone"],
+            "occupation": upload["occupation"],
+            "address": upload["address"],
+            "demo": True,
+        }, separators=(",", ":")),
+    }
+    for upload in dummy_uploads
+])
 
 # ============================================================
 # OCCUPATION DETAIL TABLES
@@ -486,7 +645,7 @@ conn.commit()
 # POST-BUILD SANITY CHECKS
 # ============================================================
 print("=" * 60)
-print("verify_deny.db — build summary")
+print("records.db — build summary")
 print("=" * 60)
 
 def count(sql):
@@ -522,7 +681,7 @@ top = cur.execute("""
     UNION ALL
     SELECT citizen_b_id FROM connections
   )
-  SELECT c.first_name || ' ' || c.last_name AS name, COUNT(d.id) AS degree
+  SELECT c.name, COUNT(d.id) AS degree
   FROM citizens c
   LEFT JOIN degrees d ON d.id = c.id
   GROUP BY c.id
