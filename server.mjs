@@ -35,19 +35,19 @@ function sendJson(ws, payload) {
 }
 
 function mapSubmissionRow(row) {
-  let status = row[10] ? String(row[10]).toLowerCase() : 'pending'
-  if (status === 'accepted') {
-    status = 'verified'
-  }
-  if (status === 'declined') {
+  let status = row[9] ? String(row[9]).toLowerCase() : 'pending'
+  if (status === 'denied') {
     status = 'invalid'
+  }
+  if (status === 'unverified') {
+    status = 'pending'
   }
   if (status !== 'pending' && status !== 'verified' && status !== 'invalid') {
     status = 'pending'
   }
   let documentPath = null
-  if (row[8]) {
-    const rawDocumentPath = String(row[8])
+  if (row[7]) {
+    const rawDocumentPath = String(row[7])
     try {
       const parsed = JSON.parse(rawDocumentPath)
       documentPath = Array.isArray(parsed) && parsed.length > 0 ? String(parsed[0]) : null
@@ -58,32 +58,33 @@ function mapSubmissionRow(row) {
 
   return {
     id: String(row[0]),
-    citizenId: row[1] ? String(row[1]) : null,
-    name: String(row[2] ?? ''),
-    phone: String(row[3] ?? ''),
-    occupation: String(row[4] ?? ''),
-    address: String(row[5] ?? ''),
-    cardId: String(row[6]),
-    cardPayload: String(row[7] ?? '{}'),
+    citizenId: String(row[0]),
+    name: String(row[1] ?? ''),
+    phone: String(row[2] ?? ''),
+    occupation: String(row[3] ?? ''),
+    address: String(row[4] ?? ''),
+    cardId: String(row[5]),
+    cardPayload: String(row[6] ?? '{}'),
     documentPath,
-    createdAt: String(row[9]),
+    createdAt: String(row[8]),
     decision: status,
-    decidedAt: row[11] ? String(row[11]) : null,
+    decidedAt: row[10] ? String(row[10]) : null,
   }
 }
 
 function mapCitizenRow(row) {
   return {
     id: String(row[0]),
-    name: String(row[1]),
-    phone: String(row[2]),
-    age: row[3] == null ? null : Number(row[3]),
-    gender: row[4] == null ? null : String(row[4]),
-    address: String(row[5]),
-    occupation: String(row[6]),
-    verificationStatus: String(row[7]),
-    trustScore: Number(row[8]),
-    createdAt: String(row[9]),
+    cardId: String(row[1]),
+    name: String(row[2]),
+    phone: String(row[3]),
+    age: row[4] == null ? null : Number(row[4]),
+    gender: row[5] == null ? null : String(row[5]),
+    address: String(row[6]),
+    occupation: String(row[7]),
+    verificationStatus: String(row[8]),
+    trustScore: Number(row[9]),
+    createdAt: String(row[10]),
   }
 }
 
@@ -131,42 +132,6 @@ async function initRecordsDb() {
   }
 
   recordsDb = bytes ? new SQL.Database(new Uint8Array(bytes)) : new SQL.Database()
-
-  recordsDb.exec(`
-    CREATE TABLE IF NOT EXISTS submissions (
-      id TEXT PRIMARY KEY,
-      citizen_id TEXT REFERENCES citizens(id) ON DELETE SET NULL,
-      name TEXT,
-      phone TEXT,
-      occupation TEXT,
-      address TEXT,
-      card_id TEXT NOT NULL,
-      card_payload TEXT,
-      document_path TEXT,
-      created_at TEXT NOT NULL,
-      decision TEXT,
-      decided_at TEXT
-    );
-  `)
-
-  // Migrations for older DB files.
-  const columns = recordsDb.exec('PRAGMA table_info(submissions);')
-  const colNames = columns.length > 0 ? columns[0].values.map((row) => String(row[1])) : []
-  if (!colNames.includes('citizen_id')) {
-    recordsDb.exec('ALTER TABLE submissions ADD COLUMN citizen_id TEXT;')
-  }
-  if (!colNames.includes('address')) {
-    recordsDb.exec("ALTER TABLE submissions ADD COLUMN address TEXT DEFAULT '';")
-  }
-  if (!colNames.includes('decision')) {
-    recordsDb.exec('ALTER TABLE submissions ADD COLUMN decision TEXT;')
-  }
-  if (!colNames.includes('decided_at')) {
-    recordsDb.exec('ALTER TABLE submissions ADD COLUMN decided_at TEXT;')
-  }
-  recordsDb.exec("UPDATE submissions SET decision = 'verified' WHERE lower(decision) = 'accepted';")
-  recordsDb.exec("UPDATE submissions SET decision = 'invalid' WHERE lower(decision) = 'declined';")
-  recordsDb.exec("UPDATE submissions SET decision = 'pending' WHERE decision IS NULL OR trim(decision) = '';")
 
   await persistRecordsDb()
 }
@@ -245,7 +210,6 @@ app.post('/api/upload', upload.array('documents'), async (req, res) => {
     const cardId = String(req.body.cardID ?? '').trim() || createServerId()
     const cardPayload = String(req.body.cardPayload ?? '{}')
 
-    const id = `sub-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
     const citizenId = `cit-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
     const createdAt = new Date().toISOString()
     const documentPaths = Array.isArray(req.files)
@@ -260,22 +224,16 @@ app.post('/api/upload', upload.array('documents'), async (req, res) => {
     })
 
     const citizenStmt = recordsDb.prepare(
-      'INSERT INTO citizens (id, name, phone, age, gender, address, occupation, verification_status, trust_score, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+      'INSERT INTO citizens (id, card_id, name, phone, age, gender, address, occupation, verification_status, trust_score, created_at, profile_source, card_payload, document_path, decided_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
     )
-    citizenStmt.run([citizenId, name, phone, null, null, address, occupation, 'pending', trustScore, createdAt])
+    citizenStmt.run([citizenId, cardId, name, phone, null, null, address, occupation, 'pending', trustScore, createdAt, 'upload', cardPayload, JSON.stringify(documentPaths), null])
     citizenStmt.free()
-
-    const stmt = recordsDb.prepare(
-      'INSERT INTO submissions (id, citizen_id, name, phone, occupation, address, card_id, card_payload, document_path, created_at, decision, decided_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
-    )
-    stmt.run([id, citizenId, name, phone, occupation, address, cardId, cardPayload, JSON.stringify(documentPaths), createdAt, 'pending', null])
-    stmt.free()
 
     await persistRecordsDb()
 
     res.json({
       ok: true,
-      id,
+      id: citizenId,
       stored: {
         citizenId,
         name,
@@ -300,9 +258,13 @@ app.get('/api/admin/submissions', async (_req, res) => {
       return
     }
 
-    const result = recordsDb.exec(
-      'SELECT id, citizen_id, name, phone, occupation, address, card_id, card_payload, document_path, created_at, decision, decided_at FROM submissions ORDER BY created_at DESC;',
-    )
+    const result = recordsDb.exec(`
+      SELECT id, name, phone, occupation, address, card_id, card_payload,
+             document_path, created_at, verification_status, decided_at
+      FROM citizens
+      WHERE profile_source = 'upload'
+      ORDER BY created_at DESC;
+    `)
     const rows = result[0]?.values ?? []
     const submissions = rows.map(mapSubmissionRow).map((row) => ({
       id: row.id,
@@ -328,7 +290,7 @@ app.get('/api/citizens', async (_req, res) => {
     }
 
     const result = recordsDb.exec(`
-      SELECT id, name, phone, age, gender, address, occupation,
+      SELECT id, card_id, name, phone, age, gender, address, occupation,
              verification_status, trust_score, created_at
       FROM citizens
       ORDER BY name COLLATE NOCASE;
@@ -348,7 +310,7 @@ app.get('/api/citizens/:id', async (req, res) => {
     }
 
     const citizenStmt = recordsDb.prepare(`
-      SELECT id, name, phone, age, gender, address, occupation,
+      SELECT id, card_id, name, phone, age, gender, address, occupation,
              verification_status, trust_score, created_at
       FROM citizens
       WHERE id = ?
@@ -430,12 +392,16 @@ app.get('/api/admin/submissions/:id', async (req, res) => {
     }
 
     const stmt = recordsDb.prepare(
-      'SELECT id, citizen_id, name, phone, occupation, address, card_id, card_payload, document_path, created_at, decision, decided_at FROM submissions WHERE id = ? LIMIT 1;',
+      `SELECT id, name, phone, occupation, address, card_id, card_payload,
+              document_path, created_at, verification_status, decided_at
+       FROM citizens
+       WHERE id = ?
+       LIMIT 1;`,
     )
     stmt.bind([String(req.params.id)])
     if (!stmt.step()) {
       stmt.free()
-      res.status(404).json({ ok: false, error: 'Submission not found' })
+      res.status(404).json({ ok: false, error: 'Citizen not found' })
       return
     }
     const row = stmt.get()
@@ -461,22 +427,11 @@ app.post('/api/admin/submissions/:id/decision', async (req, res) => {
     }
 
     const decidedAt = new Date().toISOString()
-    const lookupStmt = recordsDb.prepare('SELECT citizen_id FROM submissions WHERE id = ? LIMIT 1;')
-    lookupStmt.bind([String(req.params.id)])
-    const citizenId = lookupStmt.step() ? lookupStmt.get()[0] : null
-    lookupStmt.free()
-
-    const stmt = recordsDb.prepare('UPDATE submissions SET decision = ?, decided_at = ? WHERE id = ?;')
-    stmt.run([decision, decidedAt, String(req.params.id)])
-    stmt.free()
-
-    if (citizenId) {
-      const status = decision === 'verified' ? 'verified' : 'denied'
-      const trustScore = decision === 'verified' ? 55 : 10
-      const citizenStmt = recordsDb.prepare('UPDATE citizens SET verification_status = ?, trust_score = ? WHERE id = ?;')
-      citizenStmt.run([status, trustScore, String(citizenId)])
-      citizenStmt.free()
-    }
+    const status = decision === 'verified' ? 'verified' : 'denied'
+    const trustScore = decision === 'verified' ? 55 : 10
+    const citizenStmt = recordsDb.prepare('UPDATE citizens SET verification_status = ?, trust_score = ?, decided_at = ? WHERE id = ?;')
+    citizenStmt.run([status, trustScore, decidedAt, String(req.params.id)])
+    citizenStmt.free()
 
     await persistRecordsDb()
 
@@ -493,20 +448,9 @@ app.delete('/api/admin/submissions/:id', async (req, res) => {
       return
     }
 
-    const lookupStmt = recordsDb.prepare('SELECT citizen_id FROM submissions WHERE id = ? LIMIT 1;')
-    lookupStmt.bind([String(req.params.id)])
-    const citizenId = lookupStmt.step() ? lookupStmt.get()[0] : null
-    lookupStmt.free()
-
-    const stmt = recordsDb.prepare('DELETE FROM submissions WHERE id = ?;')
+    const stmt = recordsDb.prepare('DELETE FROM citizens WHERE id = ?;')
     stmt.run([String(req.params.id)])
     stmt.free()
-
-    if (citizenId) {
-      const citizenStmt = recordsDb.prepare('DELETE FROM citizens WHERE id = ?;')
-      citizenStmt.run([String(citizenId)])
-      citizenStmt.free()
-    }
 
     await persistRecordsDb()
 

@@ -199,7 +199,7 @@ export function PhoneRealtimeView() {
       return null
     }
   })
-  const [connection, setConnection] = useState('connecting')
+  const [connection, setConnection] = useState(() => (mockStatus ? 'connected' : 'connecting'))
   const [result, setResult] = useState<{ verified: boolean; name: string; status: 'PENDING' | 'VERIFIED' | 'INVALID' } | null>(() => {
     if (mockStatus === 'verified') {
       return { verified: true, name: 'Preview Person', status: 'VERIFIED' }
@@ -228,7 +228,6 @@ export function PhoneRealtimeView() {
 
   useEffect(() => {
     if (mockStatus) {
-      setConnection('connected')
       return
     }
     const ws = new WebSocket(socketUrl('phone', deviceId))

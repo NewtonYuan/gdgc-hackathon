@@ -3,6 +3,7 @@ import AdminLayout from './AdminLayout'
 
 type CitizenSummary = {
   id: string
+  cardId: string
   name: string
   phone: string
   age: number | null
@@ -167,6 +168,7 @@ export default function CitizensView() {
               <thead>
                 <tr>
                   <th scope="col">Name</th>
+                  <th scope="col">Card ID</th>
                   <th scope="col">Phone</th>
                   <th scope="col">Age</th>
                   <th scope="col">Occupation</th>
@@ -177,11 +179,12 @@ export default function CitizensView() {
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={7}>No citizens found.</td></tr>
+                  <tr><td colSpan={8}>No citizens found.</td></tr>
                 ) : (
                   rows.map((row) => (
                     <tr key={row.id}>
                       <td>{row.name || '-'}</td>
+                      <td>{row.cardId}</td>
                       <td>{row.phone || '-'}</td>
                       <td>{row.age ?? '-'}</td>
                       <td>{row.occupation || '-'}</td>
@@ -210,6 +213,7 @@ export default function CitizensView() {
 
           <div className="facts">
             <p><span>Phone:</span> {detail.phone || '-'}</p>
+            <p><span>Card ID:</span> {detail.cardId}</p>
             <p><span>Age:</span> {detail.age ?? '-'}</p>
             <p><span>Gender:</span> {detail.gender ?? '-'}</p>
             <p><span>Address:</span> {detail.address || '-'}</p>

@@ -17,13 +17,24 @@ import json
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "records.db")
 
-# Wipe any previous build so re-runs are deterministic
-if os.path.exists(DB_PATH):
-    os.remove(DB_PATH)
-
 conn = sqlite3.connect(DB_PATH)
 conn.execute("PRAGMA foreign_keys = ON")
 cur = conn.cursor()
+
+# Wipe any previous build so re-runs are deterministic. Drop tables in-place
+# instead of deleting the database file, which is friendlier on Windows when a
+# DB viewer has a handle open.
+cur.executescript("""
+PRAGMA foreign_keys = OFF;
+DROP TABLE IF EXISTS submissions;
+DROP TABLE IF EXISTS connections;
+DROP TABLE IF EXISTS documents;
+DROP TABLE IF EXISTS employment_details;
+DROP TABLE IF EXISTS student_details;
+DROP TABLE IF EXISTS retired_details;
+DROP TABLE IF EXISTS citizens;
+PRAGMA foreign_keys = ON;
+""")
 
 # ============================================================
 # SCHEMA
@@ -31,6 +42,7 @@ cur = conn.cursor()
 cur.executescript("""
 CREATE TABLE citizens (
   id TEXT PRIMARY KEY,
+  card_id TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
   phone TEXT NOT NULL,
   age INTEGER CHECK (age IS NULL OR age BETWEEN 5 AND 85),
@@ -41,7 +53,11 @@ CREATE TABLE citizens (
     verification_status IN ('verified','unverified','pending','denied')
   ),
   trust_score INTEGER NOT NULL CHECK (trust_score BETWEEN 0 AND 100),
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  profile_source TEXT NOT NULL CHECK (profile_source IN ('seed','upload')),
+  card_payload TEXT,
+  document_path TEXT,
+  decided_at TEXT
 );
 
 CREATE TABLE employment_details (
@@ -88,25 +104,9 @@ CREATE TABLE connections (
   CHECK (citizen_a_id < citizen_b_id)
 );
 
-CREATE TABLE submissions (
-  id TEXT PRIMARY KEY,
-  citizen_id TEXT REFERENCES citizens(id) ON DELETE SET NULL,
-  name TEXT,
-  phone TEXT,
-  occupation TEXT,
-  address TEXT,
-  card_id TEXT NOT NULL,
-  card_payload TEXT,
-  document_path TEXT,
-  created_at TEXT NOT NULL,
-  decision TEXT,
-  decided_at TEXT
-);
-
 CREATE INDEX idx_documents_citizen ON documents(citizen_id);
 CREATE INDEX idx_connections_a ON connections(citizen_a_id);
 CREATE INDEX idx_connections_b ON connections(citizen_b_id);
-CREATE INDEX idx_submissions_citizen ON submissions(citizen_id);
 """)
 
 # ============================================================
@@ -221,12 +221,44 @@ citizens = [
     (ID["ihaka"],  "Ihaka Walker",    PHONE["ihaka"],  24, "male",      "57 Grid Lane, Auckland, New Zealand",      "employed",   "verified",   62, "2031-02-18T10:00:00Z"),
 ]
 
+def card_payload(card_id, name, phone, occupation, address):
+    return json.dumps({
+        "card_id": card_id,
+        "name": name,
+        "phone": phone,
+        "occupation": occupation,
+        "address": address,
+    }, separators=(",", ":"))
+
+citizen_rows = []
+for (cid, name, phone, age, gender, address, occupation,
+     verification_status, trust_score, created_at) in citizens:
+    card_id = f"seed-card-{cid[-12:]}"
+    citizen_rows.append((
+        cid,
+        card_id,
+        name,
+        phone,
+        age,
+        gender,
+        address,
+        occupation,
+        verification_status,
+        trust_score,
+        created_at,
+        "seed",
+        card_payload(card_id, name, phone, occupation, address),
+        None,
+        None,
+    ))
+
 cur.executemany("""
   INSERT INTO citizens
-    (id, name, phone, age, gender, address, occupation,
-     verification_status, trust_score, created_at)
-  VALUES (?,?,?,?,?,?,?,?,?,?)
-""", citizens)
+    (id, card_id, name, phone, age, gender, address, occupation,
+     verification_status, trust_score, created_at, profile_source, card_payload,
+     document_path, decided_at)
+  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+""", citizen_rows)
 
 # ============================================================
 # DUMMY UPLOADS
@@ -236,7 +268,6 @@ cur.executemany("""
 # ============================================================
 dummy_uploads = [
     {
-        "submission_id": "sub-demo-amara-singh",
         "citizen_id": "cit-demo-amara-singh",
         "name": "Amara Singh",
         "phone": "+64 21 555 3101",
@@ -247,7 +278,6 @@ dummy_uploads = [
         "trust_score": 23,
     },
     {
-        "submission_id": "sub-demo-noah-patel",
         "citizen_id": "cit-demo-noah-patel",
         "name": "Noah Patel",
         "phone": "+64 21 555 3102",
@@ -258,7 +288,6 @@ dummy_uploads = [
         "trust_score": 23,
     },
     {
-        "submission_id": "sub-demo-elena-morales",
         "citizen_id": "cit-demo-elena-morales",
         "name": "Elena Morales",
         "phone": "+64 21 555 3103",
@@ -269,7 +298,6 @@ dummy_uploads = [
         "trust_score": 19,
     },
     {
-        "submission_id": "sub-demo-wiremu-clarke",
         "citizen_id": "cit-demo-wiremu-clarke",
         "name": "Wiremu Clarke",
         "phone": "",
@@ -280,7 +308,6 @@ dummy_uploads = [
         "trust_score": 19,
     },
     {
-        "submission_id": "sub-demo-hana-kim",
         "citizen_id": "cit-demo-hana-kim",
         "name": "Hana Kim",
         "phone": "+64 21 555 3105",
@@ -291,7 +318,6 @@ dummy_uploads = [
         "trust_score": 23,
     },
     {
-        "submission_id": "sub-demo-unknown-worker",
         "citizen_id": "cit-demo-unknown-worker",
         "name": "",
         "phone": "+64 21 555 3106",
@@ -305,35 +331,26 @@ dummy_uploads = [
 
 cur.executemany("""
   INSERT INTO citizens
-    (id, name, phone, age, gender, address, occupation,
-     verification_status, trust_score, created_at)
-  VALUES (:citizen_id, :name, :phone, NULL, NULL, :address, :occupation,
-          'pending', :trust_score, :created_at)
-""", dummy_uploads)
-
-submission_rows = []
-for upload in dummy_uploads:
-    payload = {
-        "card_id": upload["card_id"],
-        "name": upload["name"],
-        "phone": upload["phone"],
-        "occupation": upload["occupation"],
-        "address": upload["address"],
-        "demo": True,
-    }
-    submission_rows.append({
+    (id, card_id, name, phone, age, gender, address, occupation,
+     verification_status, trust_score, created_at, profile_source, card_payload,
+     document_path, decided_at)
+  VALUES (:citizen_id, :card_id, :name, :phone, NULL, NULL, :address,
+          :occupation, 'pending', :trust_score, :created_at, 'upload', :card_payload,
+          '[]', NULL)
+""", [
+    {
         **upload,
-        "card_payload": json.dumps(payload, separators=(",", ":")),
-        "document_path": "[]",
-    })
-
-cur.executemany("""
-  INSERT INTO submissions
-    (id, citizen_id, name, phone, occupation, address, card_id,
-     card_payload, document_path, created_at, decision, decided_at)
-  VALUES (:submission_id, :citizen_id, :name, :phone, :occupation, :address,
-          :card_id, :card_payload, :document_path, :created_at, 'pending', NULL)
-""", submission_rows)
+        "card_payload": json.dumps({
+            "card_id": upload["card_id"],
+            "name": upload["name"],
+            "phone": upload["phone"],
+            "occupation": upload["occupation"],
+            "address": upload["address"],
+            "demo": True,
+        }, separators=(",", ":")),
+    }
+    for upload in dummy_uploads
+])
 
 # ============================================================
 # OCCUPATION DETAIL TABLES
