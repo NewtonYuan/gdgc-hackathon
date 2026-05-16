@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
+import AdminSubmissionOverview from './AdminSubmissionOverview'
 
 type SubmissionSummary = {
   id: string
@@ -21,6 +22,25 @@ function readSelectedIdFromUrl(): string | null {
   return params.get('id')
 }
 
+async function fetchJsonOrThrow<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, init)
+  const text = await res.text()
+  let parsed: unknown
+
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    throw new Error('Admin API returned non-JSON response. Ensure node server is running on :3000.')
+  }
+
+  if (!res.ok) {
+    const msg = typeof parsed === 'object' && parsed !== null && 'error' in parsed ? String((parsed as { error: unknown }).error) : `Request failed: ${res.status}`
+    throw new Error(msg)
+  }
+
+  return parsed as T
+}
+
 export default function AdminView() {
   const [selectedId, setSelectedId] = useState<string | null>(() => readSelectedIdFromUrl())
   const [rows, setRows] = useState<SubmissionSummary[]>([])
@@ -29,47 +49,25 @@ export default function AdminView() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const cardPayloadPretty = useMemo(() => {
-    if (!detail) {
-      return ''
-    }
-    try {
-      return JSON.stringify(JSON.parse(detail.cardPayload), null, 2)
-    } catch {
-      return detail.cardPayload
-    }
-  }, [detail])
-
-  const parseJsonSafe = async <T,>(res: Response): Promise<T | null> => {
-    const text = await res.text()
-    try {
-      return JSON.parse(text) as T
-    } catch {
-      return null
-    }
-  }
-
   useEffect(() => {
     if (selectedId) {
       return
     }
 
     let active = true
-    fetch('/api/admin/submissions')
-      .then((res) => parseJsonSafe<{ ok: boolean; submissions: SubmissionSummary[]; error?: string }>(res))
+    fetchJsonOrThrow<{ ok: boolean; submissions: SubmissionSummary[]; error?: string }>('/api/admin/submissions')
       .then((json) => {
         if (!active) {
           return
         }
-        if (!json || !json.ok) {
-          setRows([])
-          setError(null)
-          return
+        if (!json.ok) {
+          throw new Error(json.error ?? 'Failed to load submissions')
         }
         setRows(json.submissions)
       })
       .catch((cause: unknown) => {
         if (active) {
+          setRows([])
           setError(cause instanceof Error ? cause.message : 'Failed to load submissions')
         }
       })
@@ -90,21 +88,19 @@ export default function AdminView() {
     }
 
     let active = true
-    fetch(`/api/admin/submissions/${encodeURIComponent(selectedId)}`)
-      .then((res) => parseJsonSafe<{ ok: boolean; submission?: SubmissionDetail; error?: string }>(res))
+    fetchJsonOrThrow<{ ok: boolean; submission?: SubmissionDetail; error?: string }>(`/api/admin/submissions/${encodeURIComponent(selectedId)}`)
       .then((json) => {
         if (!active) {
           return
         }
-        if (!json || !json.ok || !json.submission) {
-          setDetail(null)
-          setError(null)
-          return
+        if (!json.ok || !json.submission) {
+          throw new Error(json.error ?? 'Submission not found')
         }
         setDetail(json.submission)
       })
       .catch((cause: unknown) => {
         if (active) {
+          setDetail(null)
           setError(cause instanceof Error ? cause.message : 'Failed to load submission')
         }
       })
@@ -146,15 +142,16 @@ export default function AdminView() {
     setSaving(true)
     setError(null)
     try {
-      const res = await fetch(`/api/admin/submissions/${encodeURIComponent(detail.id)}/decision`, {
+      const json = await fetchJsonOrThrow<{ ok: boolean; error?: string }>(`/api/admin/submissions/${encodeURIComponent(detail.id)}/decision`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ decision }),
       })
-      const json = await parseJsonSafe<{ ok: boolean; error?: string }>(res)
-      if (!res.ok || !json?.ok) {
-        throw new Error(json?.error ?? 'Failed to save decision')
+
+      if (!json.ok) {
+        throw new Error(json.error ?? 'Failed to save decision')
       }
+
       setDetail((prev) => (prev ? { ...prev, decision, decidedAt: new Date().toISOString() } : prev))
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Failed to save decision')
@@ -229,42 +226,12 @@ export default function AdminView() {
           </div>
         </article>
       ) : detail ? (
-        <article className="panel">
-          <h2>Verification Overview</h2>
-          <div className="facts">
-            <p><span>Name:</span> {detail.name}</p>
-            <p><span>Phone:</span> {detail.phone}</p>
-            <p><span>Occupation:</span> {detail.occupation}</p>
-            <p><span>cardID:</span> {detail.cardId}</p>
-            <p><span>Current decision:</span> {detail.decision ?? 'PENDING'}</p>
-          </div>
-
-          <h3>Card Payload</h3>
-          <pre className="upload-json">{cardPayloadPretty}</pre>
-
-          <h3>Document Preview</h3>
-          {detail.documentPath ? (
-            <div className="doc-preview">
-              {detail.documentPath.toLowerCase().endsWith('.pdf') ? (
-                <iframe title="document-preview" src={detail.documentPath} className="doc-frame" />
-              ) : (
-                <img src={detail.documentPath} alt="Uploaded document" className="doc-image" />
-              )}
-            </div>
-          ) : (
-            <p className="tagline">No document uploaded.</p>
-          )}
-
-          <div className="actions">
-            <button type="button" onClick={backToList}>Back</button>
-            <button type="button" className="accept" disabled={saving} onClick={() => decide('ACCEPTED')}>
-              Accept
-            </button>
-            <button type="button" className="decline" disabled={saving} onClick={() => decide('DECLINED')}>
-              Decline
-            </button>
-          </div>
-        </article>
+        <AdminSubmissionOverview
+          detail={detail}
+          saving={saving}
+          onBack={backToList}
+          onDecide={decide}
+        />
       ) : null}
     </main>
   )
