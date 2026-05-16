@@ -638,3 +638,26 @@ button.deny {
   border: 2px solid #3b0c0c;
   padding: 0.65rem;
 }
+.admin-table-wrap {
+  overflow-x: auto;
+}
+
+.doc-preview {
+  margin-top: 0.75rem;
+  border: 2px solid #3b0c0c;
+  background: #070707;
+  padding: 0.5rem;
+}
+
+.doc-image {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.doc-frame {
+  width: 100%;
+  min-height: 480px;
+  border: 0;
+  background: #000;
+}
