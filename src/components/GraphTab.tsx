@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Line, OrbitControls, Stars, Text } from '@react-three/drei'
 import * as THREE from 'three'
@@ -67,7 +67,12 @@ function connectionVisuals(weight: number) {
   }
 }
 
-function SpaceNode({ node }: { node: PositionedNode }) {
+type SpaceNodeProps = {
+  node: PositionedNode
+  onSelect: (node: GraphNodeData) => void
+}
+
+function SpaceNode({ node, onSelect }: SpaceNodeProps) {
   const bodyRef = useRef<THREE.Group>(null)
   const meshRef = useRef<THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>>(null)
   const sparkMaterialRef = useRef<THREE.PointsMaterial>(null)
@@ -115,7 +120,13 @@ function SpaceNode({ node }: { node: PositionedNode }) {
 
   return (
     <group position={node.position}>
-      <group ref={bodyRef}>
+      <group
+        ref={bodyRef}
+        onClick={(event) => {
+          event.stopPropagation()
+          onSelect(node)
+        }}
+      >
         <mesh ref={meshRef}>
           <sphereGeometry args={[0.34, 48, 48]} />
           <meshStandardMaterial
@@ -155,7 +166,11 @@ function SpaceNode({ node }: { node: PositionedNode }) {
   )
 }
 
-function GraphScene({ database }: GraphTabProps) {
+type GraphSceneProps = GraphTabProps & {
+  onSelectNode: (node: GraphNodeData) => void
+}
+
+function GraphScene({ database, onSelectNode }: GraphSceneProps) {
   const { nodes, edges } = useMemo(() => buildGraphFromRecords(database), [database])
   const positionedNodes = useMemo(() => buildNodePositions(nodes), [nodes])
   const positionById = useMemo(
@@ -194,7 +209,7 @@ function GraphScene({ database }: GraphTabProps) {
         })}
 
         {positionedNodes.map((node) => (
-          <SpaceNode key={node.id} node={node} />
+          <SpaceNode key={node.id} node={node} onSelect={onSelectNode} />
         ))}
       </group>
 
@@ -213,6 +228,7 @@ function GraphScene({ database }: GraphTabProps) {
 }
 
 function GraphTab({ database }: GraphTabProps) {
+  const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null)
   const databaseSignature = useMemo(
     () => database.map((row) => `${row.name}:${row.role}:${row.district}:${row.status}`).join('|'),
     [database],
@@ -243,14 +259,46 @@ function GraphTab({ database }: GraphTabProps) {
         </div>
       </div>
 
-      <div className="graph-stage star-map" aria-label="Recovered people graph visualization">
-        <Canvas
-          className="graph-canvas"
-          camera={{ position: [0, 2.8, 8.4], fov: 52 }}
-          style={{ width: '100%', height: '100%' }}
-        >
-          <GraphScene key={databaseSignature} database={database} />
-        </Canvas>
+      <div className={`graph-layout ${selectedNode ? 'sidebar-open' : ''}`}>
+        <div className="graph-stage star-map" aria-label="Recovered people graph visualization">
+          <Canvas
+            className="graph-canvas"
+            camera={{ position: [0, 2.8, 8.4], fov: 52 }}
+            style={{ width: '100%', height: '100%' }}
+            onPointerMissed={() => setSelectedNode(null)}
+          >
+            <GraphScene key={databaseSignature} database={database} onSelectNode={setSelectedNode} />
+          </Canvas>
+        </div>
+
+        {selectedNode ? (
+          <aside className="graph-inspector" aria-label="Selected person details">
+            <p className={`graph-status-pill ${selectedNode.statusBucket}`}>
+              {selectedNode.person.graphStatus.replace('-', ' ')}
+            </p>
+            <h3 className="graph-person-code">{selectedNode.shortLabel}</h3>
+            <p className="graph-person-name">{selectedNode.person.name}</p>
+
+            <dl className="graph-person-meta">
+              <div>
+                <dt>Role</dt>
+                <dd>{selectedNode.person.role}</dd>
+              </div>
+              <div>
+                <dt>District</dt>
+                <dd>{selectedNode.person.district}</dd>
+              </div>
+              <div>
+                <dt>Status</dt>
+                <dd>{selectedNode.person.status}</dd>
+              </div>
+              <div>
+                <dt>Database Object</dt>
+                <dd>{`{ name: "${selectedNode.person.name}", role: "${selectedNode.person.role}", district: "${selectedNode.person.district}", status: "${selectedNode.person.status}" }`}</dd>
+              </div>
+            </dl>
+          </aside>
+        ) : null}
       </div>
 
       <div className="graph-notes">
@@ -262,6 +310,9 @@ function GraphTab({ database }: GraphTabProps) {
         </p>
         <p>
           <span>Connection rule</span> Role, district, and status overlap increase line thickness.
+        </p>
+        <p>
+          <span>Inspector rule</span> Click a node to open the sidebar. Click empty space to close it.
         </p>
       </div>
     </article>

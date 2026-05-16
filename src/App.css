@@ -384,15 +384,21 @@ th {
 
 .graph-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
   align-items: stretch;
+  transition: grid-template-columns 220ms ease;
+}
+
+.graph-layout.sidebar-open {
+  grid-template-columns: minmax(0, 1fr) 280px;
 }
 
 .graph-inspector {
   border: 2px solid #2a1010;
   background: linear-gradient(180deg, rgba(161, 22, 22, 0.09), transparent 30%), #0d0808;
   padding: 1rem;
+  animation: graph-sidebar-enter 180ms ease;
 }
 
 .graph-status-pill {
@@ -453,6 +459,18 @@ th {
 .graph-person-meta dd {
   margin: 0;
   color: #efefef;
+}
+
+@keyframes graph-sidebar-enter {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .graph-notes {
@@ -857,6 +875,10 @@ button.deny {
   }
 
   .graph-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .graph-layout.sidebar-open {
     grid-template-columns: 1fr;
   }
 }
