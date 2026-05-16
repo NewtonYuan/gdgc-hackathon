@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type RecordEntry = {
+  id?: string;
   name: string;
   occupation: string;
   decision: "pending" | "verified" | "invalid";
@@ -83,6 +84,7 @@ export function AdminRealtimeBridge() {
       message: string;
       tone: "neutral" | "verified" | "pending" | "invalid";
       visible: boolean;
+      submissionId?: string | null;
     }>
   >([]);
 
@@ -93,6 +95,7 @@ export function AdminRealtimeBridge() {
         (json: {
           ok: boolean;
           submissions?: Array<{
+            id: string;
             name: string;
             occupation: string;
             decision: "pending" | "verified" | "invalid";
@@ -101,6 +104,7 @@ export function AdminRealtimeBridge() {
           if (json.ok && Array.isArray(json.submissions)) {
             setRecords(
               json.submissions.map((item) => ({
+                id: item.id,
                 name: item.name,
                 occupation: item.occupation,
                 decision: item.decision ?? "pending",
@@ -121,10 +125,14 @@ export function AdminRealtimeBridge() {
       title: string,
       message: string,
       tone: "neutral" | "verified" | "pending" | "invalid" = "neutral",
+      submissionId: string | null = null,
     ) => {
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
       setSnackbars((prev) =>
-        [...prev, { id, title, message, tone, visible: false }].slice(-3),
+        [
+          ...prev,
+          { id, title, message, tone, visible: false, submissionId },
+        ].slice(-3),
       );
       window.setTimeout(() => {
         setSnackbars((prev) =>
@@ -226,22 +234,22 @@ export function AdminRealtimeBridge() {
         status,
       };
       ws.send(JSON.stringify(verdict));
+      const personName = person?.name ?? "Unknown Person";
+      const statusWord =
+        status === "VERIFIED"
+          ? "verified"
+          : status === "PENDING"
+            ? "pending"
+            : "invalid";
       showSnackbar(
         status === "VERIFIED"
           ? "Success"
           : status === "PENDING"
             ? "Pending"
             : "Error",
-        status === "VERIFIED"
-          ? "Verdict sent: Verified"
-          : status === "PENDING"
-            ? "Verdict sent: Pending"
-            : "Verdict sent: Invalid",
-        status === "VERIFIED"
-          ? "verified"
-          : status === "PENDING"
-            ? "pending"
-            : "invalid",
+        `${personName} is ${statusWord}`,
+        statusWord,
+        person?.id ?? null,
       );
     };
 
@@ -280,7 +288,7 @@ export function AdminRealtimeBridge() {
                     ? "!"
                     : "i"}
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="truncate text-[22px] font-extrabold leading-6">
                 {snackbar.title}
               </p>
@@ -288,6 +296,19 @@ export function AdminRealtimeBridge() {
                 {snackbar.message}
               </p>
             </div>
+            {snackbar.submissionId ? (
+              <a
+                href={`/admin?id=${encodeURIComponent(snackbar.submissionId)}`}
+                className="shrink-0 opacity-70 transition-opacity hover:opacity-100"
+                aria-label="Open submission details"
+              >
+                <img
+                  src="/icons/visibility.svg"
+                  alt=""
+                  className="h-6 w-6"
+                />
+              </a>
+            ) : null}
           </div>
         </div>
       ))}
