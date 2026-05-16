@@ -34,7 +34,7 @@ export default function AdminLayout({
                 alt="App logo"
                 className="app-logo w-8 h-8"
               />
-              <strong className="text-xl">records.io</strong>
+              <strong className="text-xl">Verified</strong>
             </div>
             <div className="p-1">
               <p className="admin-section-label">Overview</p>

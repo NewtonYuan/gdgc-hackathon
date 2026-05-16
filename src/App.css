@@ -1897,8 +1897,8 @@ button.deny {
 }
 
 .upload-form input {
-  border: 2px solid #5a1313;
-  background: #0b0909;
+  border: 1px solid var(--line-strong);
+  background: #121317;
   color: #f2f2f2;
   padding: 0.55rem;
   font-family: inherit;
@@ -1930,24 +1930,24 @@ button.deny {
   padding: 1.4rem 1rem;
   text-align: center;
   cursor: pointer;
-  border: 2px dashed var(--accent);
-  background: #0b0909;
+  border: 1px dashed #3c414b;
+  background: #121317;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .dropzone:hover {
-  border-color: var(--accent-bright);
+  border-color: #8f3f4b;
 }
 
 .dropzone.dragging {
-  background: #1a0a0a;
-  border-color: var(--accent-bright);
+  background: #1b1d23;
+  border-color: #8f3f4b;
 }
 
 .dropzone-icon {
   width: 58px;
   height: 58px;
-  color: var(--accent);
+  color: #c9ced8;
 }
 
 .dropzone-text {
@@ -1965,7 +1965,7 @@ button.deny {
   font-size: 0.75rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #8a6a6a;
+  color: #8f96a6;
 }
 
 .dropzone-divider::before,
@@ -1973,7 +1973,7 @@ button.deny {
   content: '';
   flex: 1;
   height: 1px;
-  background: #5a1313;
+  background: #3c414b;
 }
 
 .browse-link {
@@ -1981,7 +1981,7 @@ button.deny {
   font-weight: 700;
   font-size: 0.9rem;
   letter-spacing: 0.03em;
-  color: var(--accent-bright);
+  color: #d6d6d6;
   text-decoration: underline;
 }
 
@@ -1991,8 +1991,8 @@ button.deny {
   width: 100%;
   min-width: 0;
   min-height: 230px;
-  border: 2px solid #5a1313;
-  background: #0b0909;
+  border: 1px solid #3c414b;
+  background: #121317;
 }
 
 .filelist-head {
@@ -2001,7 +2001,7 @@ button.deny {
   align-items: baseline;
   gap: 0.5rem;
   padding: 0.55rem 0.65rem;
-  border-bottom: 1px solid #5a1313;
+  border-bottom: 1px solid #3c414b;
   font-size: 0.8rem;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -2014,7 +2014,7 @@ button.deny {
   font-size: 0.68rem;
   letter-spacing: 0.02em;
   text-transform: none;
-  color: #8a6a6a;
+  color: #8f96a6;
 }
 
 .filelist-rows {
@@ -2030,7 +2030,7 @@ button.deny {
 .filelist-empty {
   margin: auto;
   font-size: 0.8rem;
-  color: #6a5a5a;
+  color: #8f96a6;
 }
 
 .filerow {
@@ -2040,15 +2040,15 @@ button.deny {
   width: 100%;
   min-width: 0;
   padding: 0.45rem 0.55rem;
-  background: #140d0d;
-  border: 1px solid #3b0c0c;
+  background: #1b1d23;
+  border: 1px solid #2f3440;
 }
 
 .filerow-icon {
   flex-shrink: 0;
   width: 26px;
   height: 26px;
-  color: var(--accent);
+  color: #c9ced8;
 }
 
 .filerow-name {
@@ -2062,7 +2062,7 @@ button.deny {
 
 .filerow-ring {
   flex-shrink: 0;
-  color: var(--accent-bright);
+  color: #8f3f4b;
 }
 
 .filerow-ring-track {
@@ -2082,14 +2082,14 @@ button.deny {
   border: none;
   background: transparent;
   box-shadow: none;
-  color: var(--accent-bright);
+  color: #b9c0cf;
   font-size: 0.85rem;
   line-height: 1;
 }
 
 .filerow-remove:hover {
   background: transparent;
-  color: #efefef;
+  color: #ffffff;
 }
 
 @media (max-width: 620px) {
@@ -2511,10 +2511,73 @@ select:focus-visible,
 
 .upload-view .back-button {
   width: fit-content;
-  min-height: 2.25rem;
+  min-height: 2.75rem;
   align-self: start;
-  padding: 0.45rem 0.75rem;
-  font-size: 0.88rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #d6d6d6;
+  box-shadow: none;
+  font-size: 0.95rem;
+}
+
+.upload-view .topbar > .back-button {
+  margin-left: -0.7rem;
+}
+
+.upload-view .back-button:hover {
+  background: #211616;
+  color: #ffffff;
+}
+
+.upload-view .back-button:active {
+  transform: none;
+  box-shadow: none;
+}
+
+.upload-view .back-button .admin-nav-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.upload-view {
+  max-width: none;
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  background: #1f1f21;
+  color: #f2f2f2;
+}
+
+.upload-view .panel,
+.upload-view .topbar {
+  background: #1f1f21;
+  border-color: var(--line);
+}
+
+.upload-view .actions > button:first-child {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.upload-view .actions > button:first-child:hover,
+.upload-view .actions > button:first-child:active,
+.upload-view .actions > button:first-child:focus-visible {
+  background: #f1f1f1 !important;
+  color: #000000 !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.upload-view .actions > button:first-child:active {
+  background: #d9d9d9 !important;
+  transform: translateY(2px) scale(0.985) !important;
 }
 
 .panel {
