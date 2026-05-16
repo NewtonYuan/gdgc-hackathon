@@ -158,7 +158,6 @@ export default function UploadView() {
     if (!snackbar) {
       return;
     }
-    setSnackbarVisible(false);
     const showId = window.setTimeout(() => setSnackbarVisible(true), 10);
     const hideId = window.setTimeout(() => setSnackbarVisible(false), 3200);
     const removeId = window.setTimeout(() => setSnackbar(null), 3550);
