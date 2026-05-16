@@ -655,9 +655,14 @@ button.deny {
   min-height: 230px;
   padding: 1.4rem 1rem;
   text-align: center;
+  cursor: pointer;
   border: 2px dashed var(--accent);
   background: #0b0909;
   transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.dropzone:hover {
+  border-color: var(--accent-bright);
 }
 
 .dropzone.dragging {
