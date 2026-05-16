@@ -35,6 +35,17 @@ function sendJson(ws, payload) {
 }
 
 function mapSubmissionRow(row) {
+  let status = row[9] ? String(row[9]).toLowerCase() : 'pending'
+  if (status === 'accepted') {
+    status = 'verified'
+  }
+  if (status === 'declined') {
+    status = 'invalid'
+  }
+  if (status !== 'pending' && status !== 'verified' && status !== 'invalid') {
+    status = 'pending'
+  }
+
   return {
     id: String(row[0]),
     name: String(row[1]),
@@ -45,7 +56,7 @@ function mapSubmissionRow(row) {
     cardPayload: String(row[6] ?? '{}'),
     documentPath: row[7] ? String(row[7]) : null,
     createdAt: String(row[8]),
-    decision: row[9] ? String(row[9]) : null,
+    decision: status,
     decidedAt: row[10] ? String(row[10]) : null,
   }
 }
@@ -103,6 +114,9 @@ async function initUploadDb() {
   if (!colNames.includes('decided_at')) {
     uploadDb.exec('ALTER TABLE submissions ADD COLUMN decided_at TEXT;')
   }
+  uploadDb.exec("UPDATE submissions SET decision = 'verified' WHERE lower(decision) = 'accepted';")
+  uploadDb.exec("UPDATE submissions SET decision = 'invalid' WHERE lower(decision) = 'declined';")
+  uploadDb.exec("UPDATE submissions SET decision = 'pending' WHERE decision IS NULL OR trim(decision) = '';")
 
   await persistUploadDb()
 }
@@ -277,8 +291,8 @@ app.post('/api/admin/submissions/:id/decision', async (req, res) => {
       return
     }
 
-    const decision = String(req.body?.decision ?? '')
-    if (decision !== 'ACCEPTED' && decision !== 'DECLINED') {
+    const decision = String(req.body?.decision ?? '').toLowerCase()
+    if (decision !== 'verified' && decision !== 'invalid') {
       res.status(400).json({ ok: false, error: 'Invalid decision value' })
       return
     }
@@ -292,6 +306,24 @@ app.post('/api/admin/submissions/:id/decision', async (req, res) => {
     res.json({ ok: true })
   } catch (cause) {
     res.status(500).json({ ok: false, error: cause instanceof Error ? cause.message : 'Failed to save decision' })
+  }
+})
+
+app.delete('/api/admin/submissions/:id', async (req, res) => {
+  try {
+    if (!uploadDb) {
+      res.status(500).json({ ok: false, error: 'Upload DB not initialized' })
+      return
+    }
+
+    const stmt = uploadDb.prepare('DELETE FROM submissions WHERE id = ?;')
+    stmt.run([String(req.params.id)])
+    stmt.free()
+    await persistUploadDb()
+
+    res.json({ ok: true })
+  } catch (cause) {
+    res.status(500).json({ ok: false, error: cause instanceof Error ? cause.message : 'Failed to delete submission' })
   }
 })
 

@@ -9,7 +9,7 @@ type SubmissionSummary = {
   occupation: string
   cardId: string
   createdAt: string
-  decision: 'ACCEPTED' | 'DECLINED' | null
+  decision: 'pending' | 'verified' | 'invalid'
 }
 
 type SubmissionDetail = SubmissionSummary & {
@@ -44,6 +44,7 @@ async function fetchJsonOrThrow<T>(url: string, init?: RequestInit): Promise<T> 
 
 export default function AdminView() {
   const [selectedId, setSelectedId] = useState<string | null>(() => readSelectedIdFromUrl())
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'verified' | 'invalid'>('all')
   const [rows, setRows] = useState<SubmissionSummary[]>([])
   const [detail, setDetail] = useState<SubmissionDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -135,7 +136,7 @@ export default function AdminView() {
     setError(null)
   }
 
-  const decide = async (decision: 'ACCEPTED' | 'DECLINED') => {
+  const decide = async (decision: 'verified' | 'invalid') => {
     if (!detail) {
       return
     }
@@ -163,14 +164,46 @@ export default function AdminView() {
 
   const stats = {
     total: rows.length,
-    pending: rows.filter((r) => !r.decision).length,
-    accepted: rows.filter((r) => r.decision === 'ACCEPTED').length,
-    declined: rows.filter((r) => r.decision === 'DECLINED').length,
+    pending: rows.filter((r) => r.decision === 'pending').length,
+    accepted: rows.filter((r) => r.decision === 'verified').length,
+    declined: rows.filter((r) => r.decision === 'invalid').length,
+  }
+  const filteredRows = statusFilter === 'all' ? rows : rows.filter((r) => r.decision === statusFilter)
+  const pieVerified = stats.total === 0 ? 0 : Math.round((stats.accepted / stats.total) * 360)
+  const piePending = stats.total === 0 ? 0 : Math.round((stats.pending / stats.total) * 360)
+  const pieInvalid = Math.max(0, 360 - pieVerified - piePending)
+
+  const deleteSubmission = async () => {
+    if (!detail) {
+      return
+    }
+
+    const confirmed = window.confirm('Delete this submission permanently?')
+    if (!confirmed) {
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+    try {
+      const json = await fetchJsonOrThrow<{ ok: boolean; error?: string }>(`/api/admin/submissions/${encodeURIComponent(detail.id)}`, {
+        method: 'DELETE',
+      })
+      if (!json.ok) {
+        throw new Error(json.error ?? 'Failed to delete submission')
+      }
+      setRows((prev) => prev.filter((row) => row.id !== detail.id))
+      backToList()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Failed to delete submission')
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (loading) {
     return (
-      <AdminLayout active="submissions" stats={stats}>
+      <AdminLayout active="submissions">
         <article className="panel">
           <h2>Loading Admin View...</h2>
         </article>
@@ -179,10 +212,46 @@ export default function AdminView() {
   }
 
   return (
-    <AdminLayout active="submissions" stats={stats}>
-      <header className="topbar">
-        <h1>Admin View</h1>
-      </header>
+    <AdminLayout active="submissions">
+      <section className="admin-page-shell">
+        <section className="admin-header-grid">
+          <div className="admin-header-left">
+            <div className="admin-breadcrumbs">Dashboard &gt; Submissions</div>
+            <header className="admin-page-head">
+              <h1>Submissions</h1>
+            </header>
+            <div className="panel admin-toolbar">
+              <label className="admin-field">
+                <span>Status</span>
+                <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | 'pending' | 'verified' | 'invalid')}>
+                  <option value="all">All</option>
+                  <option value="pending">Pending</option>
+                  <option value="verified">Verified</option>
+                  <option value="invalid">Invalid</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <aside className="panel admin-summary-card">
+            <h3>Submission Summary</h3>
+            <div className="admin-summary-card-body">
+              <div
+                className="admin-pie"
+                aria-label="Submissions by status"
+                style={{
+                  background: `conic-gradient(#2f9f49 0deg ${pieVerified}deg, #dfb463 ${pieVerified}deg ${pieVerified + piePending}deg, #e12b2b ${pieVerified + piePending}deg ${pieVerified + piePending + pieInvalid}deg)`,
+                }}
+              />
+              <ul className="admin-legend">
+                <li><span className="dot verified-dot" />Verified: {stats.accepted}</li>
+                <li><span className="dot pending-dot" />Pending: {stats.pending}</li>
+                <li><span className="dot invalid-dot" />Invalid: {stats.declined}</li>
+                <li><span className="dot total-dot" />Total: {stats.total}</li>
+              </ul>
+            </div>
+          </aside>
+        </section>
+      </section>
 
       {error && (
         <article className="panel">
@@ -191,8 +260,7 @@ export default function AdminView() {
       )}
 
       {!selectedId ? (
-        <article className="panel">
-          <h2>Applicant Database</h2>
+        <article className="panel admin-table-panel">
           <div className="admin-table-wrap">
             <table>
               <thead>
@@ -201,26 +269,26 @@ export default function AdminView() {
                   <th>Phone</th>
                   <th>Occupation</th>
                   <th>cardID</th>
-                  <th>Status</th>
-                  <th>Action</th>
+                      <th className="status-col">Status</th>
+                      <th className="status-col">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.length === 0 ? (
+                {filteredRows.length === 0 ? (
                   <tr>
                     <td colSpan={6}>No submissions yet.</td>
                   </tr>
                 ) : (
-                  rows.map((row) => (
+                  filteredRows.map((row) => (
                     <tr key={row.id}>
                       <td>{row.name}</td>
                       <td>{row.phone}</td>
                       <td>{row.occupation}</td>
                       <td>{row.cardId}</td>
-                      <td>{row.decision ?? 'PENDING'}</td>
-                      <td>
+                      <td className={`status-col ${row.decision}`}>{row.decision.toUpperCase()}</td>
+                      <td className="status-col">
                         <button type="button" className="verify" onClick={() => openVerify(row.id)}>
-                          Verify
+                          Review
                         </button>
                       </td>
                     </tr>
@@ -236,6 +304,7 @@ export default function AdminView() {
           saving={saving}
           onBack={backToList}
           onDecide={decide}
+          onDelete={deleteSubmission}
         />
       ) : null}
     </AdminLayout>

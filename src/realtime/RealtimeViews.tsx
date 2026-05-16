@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 type RecordEntry = {
   name: string
   occupation: string
-  decision: 'ACCEPTED' | 'DECLINED' | null
+  decision: 'pending' | 'verified' | 'invalid'
 }
 
 type ScanEvent = {
@@ -70,7 +70,7 @@ export function DesktopRealtimeView({ embedded = false }: DesktopRealtimeViewPro
     let active = true
     fetch('/api/admin/submissions')
       .then((res) => res.json())
-      .then((json: { ok: boolean; submissions?: Array<{ name: string; occupation: string; decision: 'ACCEPTED' | 'DECLINED' | null }> }) => {
+      .then((json: { ok: boolean; submissions?: Array<{ name: string; occupation: string; decision: 'pending' | 'verified' | 'invalid' }> }) => {
         if (active) {
           if (json.ok && Array.isArray(json.submissions)) {
             setRecords(
@@ -110,7 +110,7 @@ export function DesktopRealtimeView({ embedded = false }: DesktopRealtimeViewPro
 
       setLastScan({ personId: payload.personId, phoneId: payload.phoneId, cardData: payload.cardData })
       const person = personMap.get(payload.personId)
-      const verified = person?.decision === 'ACCEPTED'
+      const verified = person?.decision === 'verified'
 
       const verdict: VerdictEvent = {
         type: 'verdict',
@@ -118,7 +118,7 @@ export function DesktopRealtimeView({ embedded = false }: DesktopRealtimeViewPro
         phoneId: payload.phoneId,
         verified: Boolean(verified),
         name: person?.name ?? 'Unknown Person',
-        status: person?.decision ?? 'UNKNOWN',
+        status: (person?.decision ?? 'pending').toUpperCase(),
       }
       ws.send(JSON.stringify(verdict))
     }
@@ -144,7 +144,7 @@ export function DesktopRealtimeView({ embedded = false }: DesktopRealtimeViewPro
             <p><span>Phone:</span> {lastScan.phoneId}</p>
             <p><span>Card Person ID:</span> {lastScan.personId}</p>
             <p><span>Name:</span> {activeRecord?.name ?? 'Unknown Person'}</p>
-            <p><span>Status:</span> {activeRecord?.decision ?? 'UNKNOWN'}</p>
+            <p><span>Status:</span> {(activeRecord?.decision ?? 'pending').toUpperCase()}</p>
             {lastScan.cardData && (
               <p>
                 <span>Card JSON:</span>
