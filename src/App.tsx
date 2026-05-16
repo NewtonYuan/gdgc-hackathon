@@ -11,7 +11,7 @@ function App() {
     return <DesktopAdminView />
   }
 
-  if (path === '/phone') {
+  if (path === '/checker') {
     return <PhoneRealtimeView />
   }
 
@@ -37,6 +37,9 @@ function LandingView() {
         </button>
         <button type="button" className="start-button" onClick={() => window.location.assign('/admin')}>
           ADMIN VIEW
+        </button>
+        <button type="button" className="start-button" onClick={() => window.location.assign('/checker')}>
+          CHECKER
         </button>
       </div>
     </main>
