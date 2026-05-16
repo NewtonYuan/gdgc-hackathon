@@ -350,7 +350,8 @@ export function PhoneRealtimeView() {
     <main className={`phone-screen ${bgClass}`}>
       <div className={`phone-card ${result ? `phone-card-${result.status.toLowerCase()}` : 'phone-card-neutral'}`}>
         <button type="button" className="phone-back-button" onClick={() => window.location.assign('/')}>
-          Back
+          <img src="/icons/back-checker.svg" alt="" aria-hidden="true" className="phone-back-icon" />
+          <span>Back</span>
         </button>
         <p className="tagline phone-connection">{connectionLabel}</p>
         {!result ? (

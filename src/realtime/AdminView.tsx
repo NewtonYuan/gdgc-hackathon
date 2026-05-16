@@ -169,9 +169,6 @@ export default function AdminView() {
     declined: rows.filter((r) => r.decision === 'invalid').length,
   }
   const filteredRows = statusFilter === 'all' ? rows : rows.filter((r) => r.decision === statusFilter)
-  const pieVerified = stats.total === 0 ? 0 : Math.round((stats.accepted / stats.total) * 360)
-  const piePending = stats.total === 0 ? 0 : Math.round((stats.pending / stats.total) * 360)
-  const pieInvalid = Math.max(0, 360 - pieVerified - piePending)
 
   const deleteSubmission = async () => {
     if (!detail) {
@@ -238,9 +235,7 @@ export default function AdminView() {
               <div
                 className="admin-pie"
                 aria-label="Submissions by status"
-                style={{
-                  background: `conic-gradient(#2f9f49 0deg ${pieVerified}deg, #dfb463 ${pieVerified}deg ${pieVerified + piePending}deg, #e12b2b ${pieVerified + piePending}deg ${pieVerified + piePending + pieInvalid}deg)`,
-                }}
+                style={{ background: '#2f9f49' }}
               />
               <ul className="admin-legend">
                 <li><span className="dot verified-dot" />Verified: {stats.accepted}</li>
@@ -260,10 +255,9 @@ export default function AdminView() {
       )}
 
       {!selectedId ? (
-        <article className="panel admin-table-panel">
+        <section className="admin-table-panel">
           <div className="admin-table-wrap">
             <table>
-              <caption>Applicant submissions and review status</caption>
               <thead>
                 <tr>
                   <th scope="col">Name</th>
@@ -286,7 +280,11 @@ export default function AdminView() {
                       <td>{row.phone}</td>
                       <td>{row.occupation}</td>
                       <td>{row.cardId}</td>
-                      <td className="status-col"><span className={`status-badge ${row.decision}`}>{row.decision}</span></td>
+                      <td className="status-col">
+                        <span className={`status-badge ${row.decision}`}>
+                          {row.decision === 'verified' ? 'Verified' : row.decision === 'pending' ? 'Pending' : 'Invalid'}
+                        </span>
+                      </td>
                       <td className="status-col">
                         <button type="button" className="verify" onClick={() => openVerify(row.id)}>
                           Review
@@ -298,7 +296,7 @@ export default function AdminView() {
               </tbody>
             </table>
           </div>
-        </article>
+        </section>
       ) : detail ? (
         <AdminSubmissionOverview
           detail={detail}

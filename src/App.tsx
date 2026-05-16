@@ -44,14 +44,17 @@ function LandingView() {
         <span>records.io</span>
       </div>
       <div className="start-actions">
-        <a className="start-button button" href="/upload">
-          UPLOAD
+        <a className="start-icon-button button" href="/upload" aria-label="Upload">
+          <img src="/icons/upload-home.svg" alt="" aria-hidden="true" className="start-icon" />
+          <span className="start-icon-label">Upload</span>
         </a>
-        <a className="start-button button" href="/admin">
-          ADMIN VIEW
+        <a className="start-icon-button button" href="/admin" aria-label="Admin">
+          <img src="/icons/admin-home.svg" alt="" aria-hidden="true" className="start-icon" />
+          <span className="start-icon-label">Admin</span>
         </a>
-        <a className="start-button button" href="/checker">
-          CHECKER
+        <a className="start-icon-button button" href="/checker" aria-label="Checker">
+          <img src="/icons/checker-home.svg" alt="" aria-hidden="true" className="start-icon" />
+          <span className="start-icon-label">Checker</span>
         </a>
       </div>
     </main>
