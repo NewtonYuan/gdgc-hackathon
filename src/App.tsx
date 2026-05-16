@@ -41,7 +41,7 @@ function LandingView() {
     <main className="boot-screen start-screen">
       <div className="landing-brand">
         <img src="/icons/logo.svg" alt="App logo" className="app-logo" />
-        <span>records.io</span>
+        <span>Verified</span>
       </div>
       <div className="start-actions">
         <a className="start-icon-button button" href="/upload" aria-label="Upload">

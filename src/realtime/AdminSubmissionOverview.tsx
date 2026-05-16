@@ -125,32 +125,45 @@ export default function AdminSubmissionOverview({
             {documents.length > 0 ? (
               <ul className="space-y-2">
                 {documents.map((docPath, index) => {
-                  const isPdf = docPath.toLowerCase().endsWith(".pdf");
+                  const lowerPath = docPath.toLowerCase();
                   const fileName = decodeURIComponent(
                     docPath.split("/").pop() || `document-${index + 1}`,
                   );
+                  const typeLogo = lowerPath.endsWith(".pdf")
+                    ? "/images/pdf.png"
+                    : null;
                   return (
                     <li
                       key={`${docPath}-${index}`}
                       className="flex items-center gap-3 rounded-lg border border-[var(--line)] bg-[#121317] px-3 py-2"
                     >
                       <div className="h-12 w-12 overflow-hidden rounded bg-[#1f1f21] flex items-center justify-center">
-                        {isPdf ? (
-                          <span className="text-[10px] font-bold text-red-300">
-                            PDF
-                          </span>
-                        ) : (
-                          <img
-                            src={docPath}
-                            alt=""
-                            aria-hidden="true"
-                            className="h-full w-full object-cover"
-                          />
-                        )}
+                        <img
+                          src={typeLogo ?? docPath}
+                          alt=""
+                          aria-hidden="true"
+                          className={
+                            typeLogo
+                              ? "h-full w-full object-contain p-1.5"
+                              : "h-full w-full object-cover"
+                          }
+                        />
                       </div>
-                      <p className="font-semibold text-base truncate">
+                      <p className="min-w-0 flex-1 truncate font-semibold text-base">
                         {fileName}
                       </p>
+                      <a
+                        href={docPath}
+                        download={fileName}
+                        className="shrink-0 transition-opacity hover:opacity-100"
+                        aria-label={`Download ${fileName}`}
+                      >
+                        <img
+                          src="/icons/download.svg"
+                          alt=""
+                          className="h-6 w-6"
+                        />
+                      </a>
                     </li>
                   );
                 })}
