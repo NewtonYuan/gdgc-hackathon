@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 type AdminLayoutProps = {
-  active: 'submissions' | 'desktop'
+  active: 'submissions' | 'desktop' | 'citizens'
   children: ReactNode
 }
 
@@ -11,30 +11,39 @@ export default function AdminLayout({ active, children }: AdminLayoutProps) {
       <div className="admin-layout">
         <aside className="admin-sidebar panel">
           <div className="admin-brand">
-            <strong>records.io</strong>
+            <strong>VERIFY//DENY</strong>
+            <span>Records terminal</span>
           </div>
 
           <nav className="admin-nav" aria-label="Admin sections">
-            <button
-              type="button"
+            <a
+              href="/admin"
               className={`admin-nav-item ${active === 'submissions' ? 'active' : ''}`}
-              onClick={() => window.location.assign('/admin')}
+              aria-current={active === 'submissions' ? 'page' : undefined}
             >
               <img src="/icons/database.svg" alt="" aria-hidden="true" className="admin-nav-icon" />
               Submissions
-            </button>
-            <button
-              type="button"
+            </a>
+            <a
+              href="/desktop"
               className={`admin-nav-item ${active === 'desktop' ? 'active' : ''}`}
-              onClick={() => window.location.assign('/desktop')}
+              aria-current={active === 'desktop' ? 'page' : undefined}
             >
               <img src="/icons/timelapse.svg" alt="" aria-hidden="true" className="admin-nav-icon" />
               Desktop View
-            </button>
+            </a>
+            <a
+              href="/citizens"
+              className={`admin-nav-item ${active === 'citizens' ? 'active' : ''}`}
+              aria-current={active === 'citizens' ? 'page' : undefined}
+            >
+              <img src="/icons/database.svg" alt="" aria-hidden="true" className="admin-nav-icon" />
+              Citizens DB
+            </a>
           </nav>
 
           <div className="actions">
-            <button type="button" onClick={() => window.location.assign('/')}>Back</button>
+            <a className="button secondary" href="/">Back</a>
           </div>
         </aside>
 

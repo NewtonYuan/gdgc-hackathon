@@ -46,8 +46,8 @@ export default function AdminSubmissionOverview({
         <p><span>Name:</span> {detail.name}</p>
         <p><span>Phone:</span> {detail.phone}</p>
         <p><span>Occupation:</span> {detail.occupation}</p>
-        <p><span>cardID:</span> {detail.cardId}</p>
-        <p><span>Current decision:</span> {detail.decision.toUpperCase()}</p>
+        <p><span>Card ID:</span> {detail.cardId}</p>
+        <p><span>Current decision:</span> <span className={`status-badge ${detail.decision}`}>{detail.decision}</span></p>
       </div>
 
       <h3>Card Payload</h3>

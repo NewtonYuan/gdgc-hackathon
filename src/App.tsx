@@ -3,6 +3,7 @@ import { PhoneRealtimeView } from './realtime/RealtimeViews'
 import UploadView from './realtime/UploadView'
 import AdminView from './realtime/AdminView'
 import DesktopAdminView from './realtime/DesktopAdminView'
+import CitizensView from './realtime/CitizensView'
 
 function App() {
   const path = window.location.pathname.toLowerCase()
@@ -23,6 +24,10 @@ function App() {
     return <AdminView />
   }
 
+  if (path === '/citizens') {
+    return <CitizensView />
+  }
+
   return <LandingView />
 }
 
@@ -32,15 +37,15 @@ function LandingView() {
       <div className="caution-tape tape-one" aria-hidden="true" />
       <div className="caution-tape tape-two" aria-hidden="true" />
       <div className="start-actions">
-        <button type="button" className="start-button" onClick={() => window.location.assign('/upload')}>
+        <a className="start-button button" href="/upload">
           UPLOAD
-        </button>
-        <button type="button" className="start-button" onClick={() => window.location.assign('/admin')}>
+        </a>
+        <a className="start-button button" href="/admin">
           ADMIN VIEW
-        </button>
-        <button type="button" className="start-button" onClick={() => window.location.assign('/checker')}>
+        </a>
+        <a className="start-button button" href="/checker">
           CHECKER
-        </button>
+        </a>
       </div>
     </main>
   )
