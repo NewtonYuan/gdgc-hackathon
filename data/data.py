@@ -100,6 +100,14 @@ CREATE TABLE connections (
                      'neighbor','friend','employer','employee')
   ),
   strength INTEGER NOT NULL CHECK (strength BETWEEN 1 AND 10),
+  id TEXT,
+  status TEXT CHECK (
+    status IS NULL OR status IN ('auto_linked','suggested','confirmed','dismissed','disputed')
+  ),
+  confidence INTEGER CHECK (confidence IS NULL OR confidence BETWEEN 0 AND 100),
+  match_breakdown TEXT,
+  created_at TEXT,
+  last_evaluated_at TEXT,
   PRIMARY KEY (citizen_a_id, citizen_b_id),
   CHECK (citizen_a_id < citizen_b_id)
 );
@@ -107,6 +115,8 @@ CREATE TABLE connections (
 CREATE INDEX idx_documents_citizen ON documents(citizen_id);
 CREATE INDEX idx_connections_a ON connections(citizen_a_id);
 CREATE INDEX idx_connections_b ON connections(citizen_b_id);
+CREATE INDEX idx_connections_status ON connections(status);
+CREATE INDEX idx_connections_evaluated ON connections(last_evaluated_at);
 """)
 
 # ============================================================
@@ -373,6 +383,10 @@ employment = [
     (ID["samir"],  "Associate Professor",    "University of Auckland",  "14 Symonds St, Auckland"),
     (ID["freya"],  "Structural Engineer",    "Auckland Public Works",   "88 Civic Sq, Auckland"),
     (ID["ihaka"],  "Grid Apprentice",        "Grid Authority",          "50 Industrial Pkwy, Auckland"),
+    ("cit-demo-amara-singh", "Civil Engineer", "Auckland Public Works", "88 Civic Sq, Auckland"),
+    ("cit-demo-noah-patel", "Paramedic", "Aurora General Hospital", "200 Hospital Way, Auckland"),
+    ("cit-demo-hana-kim", "Pharmacy Assistant", "Aurora General Hospital", "200 Hospital Way, Auckland"),
+    ("cit-demo-unknown-worker", "Warehouse Worker", "Auckland Public Works", "88 Civic Sq, Auckland"),
 ]
 cur.executemany(
     "INSERT INTO employment_details VALUES (?,?,?,?)", employment
@@ -384,6 +398,7 @@ students = [
     (ID["ana"],    "University of Auckland", "UOA-2030-15829", "Computer Science",    2),
     (ID["jordan"], "University of Auckland", "UOA-2030-16104", "Civil Engineering",   3),
     (ID["yusuf"],  "University of Auckland", "UOA-2029-14012", "Medicine",            4),
+    ("cit-demo-wiremu-clarke", "University of Auckland", "UOA-DEMO-3104", "Civil Engineering", 3),
 ]
 cur.executemany(
     "INSERT INTO student_details VALUES (?,?,?,?,?)", students
@@ -635,7 +650,7 @@ for a, b, rel, strength in raw_edges:
         best_per_pair[key] = (a, b, rel, strength)
 
 cur.executemany(
-    "INSERT INTO connections VALUES (?,?,?,?)",
+    "INSERT INTO connections (citizen_a_id, citizen_b_id, relationship, strength) VALUES (?,?,?,?)",
     list(best_per_pair.values()),
 )
 

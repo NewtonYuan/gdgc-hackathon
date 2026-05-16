@@ -18,6 +18,22 @@ type SubmissionDetail = SubmissionSummary & {
   decidedAt: string | null;
 };
 
+type ProfileConnection = {
+  profileId: string;
+  cardId: string;
+  name: string;
+  verificationStatus: string;
+  trustScore: number;
+  status: "auto_linked" | "suggested";
+  confidence: number;
+  matchBreakdown: Record<string, number>;
+};
+
+type ProfileConnections = {
+  autoLinked: ProfileConnection[];
+  suggested: ProfileConnection[];
+};
+
 function readSelectedIdFromUrl(): string | null {
   const params = new URLSearchParams(window.location.search);
   return params.get("id");
@@ -58,6 +74,12 @@ export default function AdminView() {
   const [detail, setDetail] = useState<SubmissionDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [connectionsLoading, setConnectionsLoading] = useState(false);
+  const [connections, setConnections] = useState<ProfileConnections>({
+    autoLinked: [],
+    suggested: [],
+  });
+  const [connectionsError, setConnectionsError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -142,6 +164,63 @@ export default function AdminView() {
     };
   }, [selectedId]);
 
+  useEffect(() => {
+    if (!selectedId) {
+      setConnections({ autoLinked: [], suggested: [] });
+      setConnectionsError(null);
+      return;
+    }
+
+    let active = true;
+    setConnectionsLoading(true);
+    setConnectionsError(null);
+
+    fetchJsonOrThrow<{
+      ok: boolean;
+      error?: string;
+    }>(`/api/profiles/${encodeURIComponent(selectedId)}/rediscover`, {
+      method: "POST",
+    })
+      .then((json) => {
+        if (!json.ok) {
+          throw new Error(json.error ?? "Failed to scan connections");
+        }
+        return fetchJsonOrThrow<{
+          ok: boolean;
+          connections?: ProfileConnections;
+          error?: string;
+        }>(`/api/profiles/${encodeURIComponent(selectedId)}/connections`);
+      })
+      .then((json) => {
+        if (!active) {
+          return;
+        }
+        if (!json.ok || !json.connections) {
+          throw new Error(json.error ?? "Failed to load connections");
+        }
+        setConnections(json.connections);
+      })
+      .catch((cause: unknown) => {
+        if (active) {
+          setConnections({ autoLinked: [], suggested: [] });
+          setConnectionsError(
+            cause instanceof Error
+              ? cause.message
+              : "Failed to load connections",
+          );
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setConnectionsLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedId]);
+
   const openVerify = (id: string) => {
     const url = new URL(window.location.href);
     url.searchParams.set("id", id);
@@ -202,6 +281,40 @@ export default function AdminView() {
     }
   };
 
+  const refreshConnections = async () => {
+    if (!detail) {
+      return;
+    }
+
+    setConnectionsLoading(true);
+    setConnectionsError(null);
+    try {
+      const rediscover = await fetchJsonOrThrow<{ ok: boolean; error?: string }>(
+        `/api/profiles/${encodeURIComponent(detail.id)}/rediscover`,
+        { method: "POST" },
+      );
+      if (!rediscover.ok) {
+        throw new Error(rediscover.error ?? "Failed to rediscover connections");
+      }
+
+      const json = await fetchJsonOrThrow<{
+        ok: boolean;
+        connections?: ProfileConnections;
+        error?: string;
+      }>(`/api/profiles/${encodeURIComponent(detail.id)}/connections`);
+      if (!json.ok || !json.connections) {
+        throw new Error(json.error ?? "Failed to load connections");
+      }
+      setConnections(json.connections);
+    } catch (cause) {
+      setConnectionsError(
+        cause instanceof Error ? cause.message : "Failed to refresh connections",
+      );
+    } finally {
+      setConnectionsLoading(false);
+    }
+  };
+
   const stats = {
     total: rows.length,
     pending: rows.filter((r) => r.decision === "pending").length,
@@ -216,9 +329,7 @@ export default function AdminView() {
   const pieInvalid = Math.max(0, 360 - pieVerified - piePending);
   const selectedName =
     detail?.name ?? rows.find((row) => row.id === selectedId)?.name ?? null;
-  const submissionsTitle = selectedName
-    ? `Overview of ${selectedName}`
-    : "Submissions";
+  const submissionsTitle = selectedName ?? "Submissions";
 
   const deleteSubmission = async () => {
     if (!detail) {
@@ -440,9 +551,13 @@ export default function AdminView() {
         <AdminSubmissionOverview
           detail={detail}
           saving={saving}
+          connections={connections}
+          connectionsLoading={connectionsLoading}
+          connectionsError={connectionsError}
           onBack={backToList}
           onDecide={decide}
           onDelete={deleteSubmission}
+          onRefreshConnections={refreshConnections}
         />
       ) : null}
     </AdminLayout>

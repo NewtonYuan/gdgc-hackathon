@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Billboard, Line, OrbitControls, Stars, Text } from '@react-three/drei'
 import * as THREE from 'three'
 import type { GraphNodeData, GraphPayload } from '../lib/graphData'
 
 type GraphTabProps = {
   graph: GraphPayload
+  initialFocusNodeId?: string | null
 }
 
 type PositionedNode = GraphNodeData & {
@@ -283,6 +284,8 @@ type GraphSceneProps = {
 
 function GraphScene({ graph, layoutNodes, focusedNodeId, highlightedNodeIds, onSelectNode }: GraphSceneProps) {
   const { nodes, edges } = graph
+  const { camera } = useThree()
+  const controlsRef = useRef<any>(null)
   const focusMode = Boolean(focusedNodeId && highlightedNodeIds)
   const positionedNodes = useMemo(() => buildNodePositions(layoutNodes), [layoutNodes])
   const positionById = useMemo(
@@ -290,6 +293,26 @@ function GraphScene({ graph, layoutNodes, focusedNodeId, highlightedNodeIds, onS
     [positionedNodes],
   )
   const visibleNodeIds = useMemo(() => new Set(nodes.map((node) => node.id)), [nodes])
+
+  useEffect(() => {
+    if (!focusedNodeId) {
+      return
+    }
+
+    const focusPosition = positionById.get(focusedNodeId)
+    if (!focusPosition) {
+      return
+    }
+
+    const target = new THREE.Vector3(...focusPosition)
+    const offset = new THREE.Vector3(0, 1.2, 5.2)
+    camera.position.copy(target.clone().add(offset))
+    camera.lookAt(target)
+    if (controlsRef.current) {
+      controlsRef.current.target.copy(target)
+      controlsRef.current.update()
+    }
+  }, [camera, focusedNodeId, positionById])
 
   return (
     <>
@@ -336,6 +359,7 @@ function GraphScene({ graph, layoutNodes, focusedNodeId, highlightedNodeIds, onS
       </group>
 
       <OrbitControls
+        ref={controlsRef}
         makeDefault
         enableDamping
         dampingFactor={0.08}
@@ -518,7 +542,9 @@ function readFiltersFromUrl(): { filters: FilterState; search: string } {
 
 function writeFiltersToUrl(filters: FilterState, search: string) {
   const params = new URLSearchParams()
+  const focusNodeId = new URLSearchParams(window.location.search).get('focus')
 
+  if (focusNodeId) params.set('focus', focusNodeId)
   if (search.trim()) params.set('search', search.trim())
   if (filters.statuses.length > 0) params.set('status', filters.statuses.join(','))
   if (filters.trustMin !== 0) params.set('trustMin', String(filters.trustMin))
@@ -922,7 +948,7 @@ function ProfileModal({ graph, node, onClose, onSelectNode }: ProfileModalProps)
   )
 }
 
-function GraphTab({ graph }: GraphTabProps) {
+function GraphTab({ graph, initialFocusNodeId }: GraphTabProps) {
   const initialUrlState = useMemo(() => readFiltersFromUrl(), [])
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null)
   const [sidebarNode, setSidebarNode] = useState<GraphNodeData | null>(null)
@@ -1130,6 +1156,19 @@ function GraphTab({ graph }: GraphTabProps) {
       closeInspector(selectedNode)
     }
   }, [filteredNodeIds, selectedNode])
+
+  useEffect(() => {
+    if (!initialFocusNodeId || selectedNode?.id === initialFocusNodeId) {
+      return
+    }
+
+    const focusedNode = graph.nodes.find((node) => node.id === initialFocusNodeId)
+    if (!focusedNode) {
+      return
+    }
+
+    selectNode(focusedNode)
+  }, [graph.nodes, initialFocusNodeId, selectedNode?.id])
 
   useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {

@@ -6,6 +6,11 @@ import fs from 'node:fs/promises'
 import multer from 'multer'
 import initSqlJs from 'sql.js'
 import { WebSocketServer } from 'ws'
+import {
+  discoverConnections,
+  ensureConnectionDiscoverySchema,
+  getProfileConnections,
+} from './services/connection-discovery.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -135,8 +140,21 @@ async function initRecordsDb() {
   }
 
   recordsDb = bytes ? new SQL.Database(new Uint8Array(bytes)) : new SQL.Database()
+  ensureConnectionDiscoverySchema(recordsDb)
 
   await persistRecordsDb()
+}
+
+function rediscoverConnectionsInBackground(profileId) {
+  setTimeout(() => {
+    discoverConnections(profileId, { db: recordsDb, persist: persistRecordsDb })
+      .then((summary) => {
+        console.info(`Connection discovery for ${profileId}:`, summary)
+      })
+      .catch((cause) => {
+        console.error(`Connection discovery failed for ${profileId}:`, cause)
+      })
+  }, 0)
 }
 
 function mapGraphStatus(status) {
@@ -405,6 +423,7 @@ app.post('/api/upload', upload.array('documents'), async (req, res) => {
     citizenStmt.free()
 
     await persistRecordsDb()
+    rediscoverConnectionsInBackground(citizenId)
 
     res.json({
       ok: true,
@@ -572,6 +591,36 @@ app.get('/api/citizens/:id', async (req, res) => {
   }
 })
 
+app.post('/api/profiles/:id/rediscover', async (req, res) => {
+  try {
+    if (!recordsDb) {
+      res.status(500).json({ ok: false, error: 'Records DB not initialized' })
+      return
+    }
+
+    const summary = await discoverConnections(String(req.params.id), { db: recordsDb, persist: persistRecordsDb })
+    res.json({ ok: true, summary })
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : 'Failed to rediscover connections'
+    const status = message.includes('Profile not found') ? 404 : 500
+    res.status(status).json({ ok: false, error: message })
+  }
+})
+
+app.get('/api/profiles/:id/connections', async (req, res) => {
+  try {
+    if (!recordsDb) {
+      res.status(500).json({ ok: false, error: 'Records DB not initialized' })
+      return
+    }
+
+    const connections = getProfileConnections(recordsDb, String(req.params.id))
+    res.json({ ok: true, connections })
+  } catch (cause) {
+    res.status(500).json({ ok: false, error: cause instanceof Error ? cause.message : 'Failed to load profile connections' })
+  }
+})
+
 app.get('/api/admin/submissions/:id', async (req, res) => {
   try {
     if (!recordsDb) {
@@ -646,6 +695,10 @@ app.delete('/api/admin/submissions/:id', async (req, res) => {
   } catch (cause) {
     res.status(500).json({ ok: false, error: cause instanceof Error ? cause.message : 'Failed to delete submission' })
   }
+})
+
+app.use('/api/{*any}', (_req, res) => {
+  res.status(404).json({ ok: false, error: 'API route not found' })
 })
 
 const distPath = path.join(__dirname, 'dist')

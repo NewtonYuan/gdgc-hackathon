@@ -4,6 +4,7 @@ import type { GraphPayload } from '../lib/graphData'
 import AdminLayout from './AdminLayout'
 
 export default function AdminGraphView() {
+  const focusNodeId = new URLSearchParams(window.location.search).get('focus')
   const [graph, setGraph] = useState<GraphPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -53,7 +54,7 @@ export default function AdminGraphView() {
           <p className="tagline">{error}</p>
         </article>
       ) : (
-        <GraphTab graph={graph ?? { nodes: [], edges: [] }} />
+        <GraphTab graph={graph ?? { nodes: [], edges: [] }} initialFocusNodeId={focusNodeId} />
       )}
     </AdminLayout>
   )
