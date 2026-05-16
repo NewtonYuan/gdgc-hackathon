@@ -74,7 +74,7 @@ function connectionVisuals(weight: number) {
 
   return {
     color: normalized >= 0.75 ? '#ffffff' : normalized >= 0.45 ? '#b8f3ff' : '#4aa8d8',
-    lineWidth: 0.55 + emphasis * 8.5,
+    lineWidth: 0.18 + emphasis * 2.7,
     opacity: 0.24 + normalized * 0.68,
   }
 }
