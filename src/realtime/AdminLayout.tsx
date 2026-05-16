@@ -11,6 +11,7 @@ export default function AdminLayout({ active, children }: AdminLayoutProps) {
       <div className="admin-layout">
         <aside className="admin-sidebar panel">
           <div className="admin-brand">
+            <img src="/icons/logo.svg" alt="App logo" className="app-logo" />
             <strong>records.io</strong>
           </div>
 
