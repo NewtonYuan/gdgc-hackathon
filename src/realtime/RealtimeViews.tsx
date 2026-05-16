@@ -654,6 +654,7 @@ export function PhoneRealtimeView() {
     }
     return null;
   });
+  const [resultOccupation, setResultOccupation] = useState("");
   const [sent, setSent] = useState(false);
   const [missingId, setMissingId] = useState(true);
 
@@ -671,6 +672,11 @@ export function PhoneRealtimeView() {
           phoneId: deviceId,
           cardData: payload ?? undefined,
         }),
+      );
+      setResultOccupation(
+        payload && typeof payload.occupation === "string"
+          ? payload.occupation.trim()
+          : "",
       );
       setSent(true);
       setMissingId(false);
@@ -808,6 +814,7 @@ export function PhoneRealtimeView() {
     }
     const timeoutId = window.setTimeout(() => {
       setResult(null);
+      setResultOccupation("");
       setSent(false);
     }, 5000);
     return () => {
@@ -878,6 +885,9 @@ export function PhoneRealtimeView() {
                 : result.status === "PENDING"
                   ? `${result.name} is still pending review.`
                   : `${result.name} is invalid.`}
+            </p>
+            <p className="phone-subtitle">
+              Occupation: {resultOccupation || "Unknown"}
             </p>
           </>
         )}
