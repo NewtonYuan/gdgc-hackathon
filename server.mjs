@@ -56,7 +56,7 @@ function mapSubmissionRow(row) {
     const rawDocumentPath = String(row[7])
     try {
       const parsed = JSON.parse(rawDocumentPath)
-      documentPath = Array.isArray(parsed) && parsed.length > 0 ? String(parsed[0]) : null
+      documentPath = Array.isArray(parsed) && parsed.length > 0 ? rawDocumentPath : null
     } catch {
       documentPath = rawDocumentPath
     }
@@ -78,9 +78,10 @@ function mapSubmissionRow(row) {
   }
 }
 
-function mapCitizenRow(row) {
+function mapCitizenRow(row, realtimeTrustScores = null) {
+  const id = String(row[0])
   return {
-    id: String(row[0]),
+    id,
     cardId: String(row[1]),
     name: String(row[2]),
     phone: String(row[3]),
@@ -89,9 +90,156 @@ function mapCitizenRow(row) {
     address: String(row[6]),
     occupation: String(row[7]),
     verificationStatus: String(row[8]),
-    trustScore: Number(row[9]),
+    trustScore: realtimeTrustScores?.get(id) ?? Number(row[9]),
     createdAt: String(row[10]),
   }
+}
+
+function clampTrustScore(score) {
+  return Math.max(0, Math.min(100, Math.round(score)))
+}
+
+function countUploadedDocuments(documentPath) {
+  if (!documentPath) {
+    return 0
+  }
+
+  const rawDocumentPath = String(documentPath)
+  try {
+    const parsed = JSON.parse(rawDocumentPath)
+    return Array.isArray(parsed) ? parsed.filter(Boolean).length : 0
+  } catch {
+    return rawDocumentPath.trim() ? 1 : 0
+  }
+}
+
+function countCardPayloadFields(cardPayload) {
+  if (!cardPayload) {
+    return 0
+  }
+
+  try {
+    const payload = JSON.parse(String(cardPayload))
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return 0
+    }
+
+    return Object.values(payload).filter((value) => {
+      if (value == null) {
+        return false
+      }
+      if (typeof value === 'string') {
+        return value.trim().length > 0
+      }
+      if (Array.isArray(value)) {
+        return value.length > 0
+      }
+      return true
+    }).length
+  } catch {
+    return 0
+  }
+}
+
+function calculateRealtimeTrustScores() {
+  const result = recordsDb.exec(`
+    SELECT
+      c.id,
+      c.name,
+      c.phone,
+      c.age,
+      c.gender,
+      c.address,
+      c.occupation,
+      c.card_payload,
+      c.document_path,
+      COUNT(DISTINCT d.id) AS document_count,
+      MAX(CASE WHEN ed.citizen_id IS NOT NULL THEN 1 ELSE 0 END) AS has_employment,
+      MAX(CASE WHEN sd.citizen_id IS NOT NULL THEN 1 ELSE 0 END) AS has_student,
+      MAX(CASE WHEN rd.citizen_id IS NOT NULL THEN 1 ELSE 0 END) AS has_retired
+    FROM citizens c
+    LEFT JOIN documents d ON d.citizen_id = c.id
+    LEFT JOIN employment_details ed ON ed.citizen_id = c.id
+    LEFT JOIN student_details sd ON sd.citizen_id = c.id
+    LEFT JOIN retired_details rd ON rd.citizen_id = c.id
+    GROUP BY c.id;
+  `)
+
+  const people = new Map()
+  for (const row of result[0]?.values ?? []) {
+    const id = String(row[0])
+    people.set(id, {
+      id,
+      name: String(row[1] ?? ''),
+      phone: String(row[2] ?? ''),
+      age: row[3] == null ? null : Number(row[3]),
+      gender: row[4] == null ? '' : String(row[4]),
+      address: String(row[5] ?? ''),
+      occupation: String(row[6] ?? ''),
+      cardPayloadFieldCount: countCardPayloadFields(row[7]),
+      documentCount: Number(row[9] ?? 0) + countUploadedDocuments(row[8]),
+      hasOccupationDetail: Boolean(Number(row[10] ?? 0) || Number(row[11] ?? 0) || Number(row[12] ?? 0)),
+      links: [],
+    })
+  }
+
+  const edgeResult = recordsDb.exec(`
+    SELECT citizen_a_id, citizen_b_id, relationship, strength
+    FROM connections;
+  `)
+
+  for (const row of edgeResult[0]?.values ?? []) {
+    const leftId = String(row[0])
+    const rightId = String(row[1])
+    const relationship = String(row[2] ?? '')
+    const strength = Number(row[3] ?? 0)
+    people.get(leftId)?.links.push({ otherId: rightId, relationship, strength })
+    people.get(rightId)?.links.push({ otherId: leftId, relationship, strength })
+  }
+
+  let maxConnectionCount = 1
+  let maxTotalStrength = 1
+  let maxRelationshipTypes = 1
+  for (const person of people.values()) {
+    const relationshipTypes = new Set(person.links.map((link) => link.relationship))
+    const totalStrength = person.links.reduce((sum, link) => sum + link.strength, 0)
+    maxConnectionCount = Math.max(maxConnectionCount, person.links.length)
+    maxTotalStrength = Math.max(maxTotalStrength, totalStrength)
+    maxRelationshipTypes = Math.max(maxRelationshipTypes, relationshipTypes.size)
+  }
+
+  const scores = new Map()
+  for (const person of people.values()) {
+    const personalInfoCompleteness = (
+      (person.name.trim() ? 0.12 : 0)
+      + (person.phone.trim() ? 0.1 : 0)
+      + (person.address.trim() ? 0.1 : 0)
+      + (person.occupation.trim() ? 0.08 : 0)
+      + (person.age != null ? 0.05 : 0)
+      + (person.gender.trim() ? 0.05 : 0)
+      + (person.hasOccupationDetail ? 0.12 : 0)
+      + Math.min(person.cardPayloadFieldCount / 5, 1) * 0.1
+    ) / 0.72
+    const documentCompleteness = Math.min(person.documentCount / 5, 1) ** 1.25
+
+    const relationshipTypes = new Set(person.links.map((link) => link.relationship))
+    const totalStrength = person.links.reduce((sum, link) => sum + link.strength, 0)
+    const connectionStrength = (
+      Math.min((person.links.length / maxConnectionCount) ** 1.55, 1) * 0.32
+      + Math.min((totalStrength / maxTotalStrength) ** 1.65, 1) * 0.58
+      + Math.min((relationshipTypes.size / maxRelationshipTypes) ** 1.35, 1) * 0.1
+    )
+
+    const weightedTrust = (
+      connectionStrength * 0.5
+      + documentCompleteness * 0.3
+      + personalInfoCompleteness * 0.2
+    )
+
+    scores.set(person.id, clampTrustScore((weightedTrust ** 1.35) * 96))
+  }
+
+  return scores
 }
 
 function mapDocumentRow(row) {
@@ -102,16 +250,6 @@ function mapDocumentRow(row) {
     expiryDate: row[3] ? String(row[3]) : null,
     issuingAuthority: String(row[4]),
   }
-}
-
-function calculateInitialTrustScore({ name, phone, occupation, address, documentCount }) {
-  let score = 8
-  if (name.trim()) score += 4
-  if (phone.trim()) score += 4
-  if (occupation.trim()) score += 3
-  if (address.trim()) score += 4
-  score += Math.min(documentCount, 3) * 5
-  return Math.min(score, 35)
 }
 
 async function persistRecordsDb() {
@@ -199,6 +337,7 @@ function initials(firstName, lastName) {
 }
 
 function loadRecordsGraph() {
+  const realtimeTrustScores = calculateRealtimeTrustScores()
   const citizenResult = recordsDb.exec(`
     SELECT
       c.id,
@@ -210,7 +349,7 @@ function loadRecordsGraph() {
       c.address,
       c.occupation,
       c.verification_status,
-      c.trust_score,
+      0 AS trust_score,
       c.created_at,
       c.profile_source,
       c.card_payload,
@@ -258,6 +397,7 @@ function loadRecordsGraph() {
   }
 
   const nodes = (citizenResult[0]?.values ?? []).map((row) => {
+    const citizenId = String(row[0])
     const name = String(row[2] ?? '').trim() || String(row[1])
     const { firstName, lastName } = splitName(name)
     const { street, city, country } = splitAddress(row[6])
@@ -270,7 +410,7 @@ function loadRecordsGraph() {
       shortLabel: label,
       statusBucket: mapGraphStatus(verificationStatus),
       person: {
-        id: String(row[0]),
+        id: citizenId,
         cardId: String(row[1]),
         firstName,
         lastName,
@@ -284,13 +424,13 @@ function loadRecordsGraph() {
         country,
         occupationType: String(row[7] ?? ''),
         verificationStatus,
-        trustScore: Number(row[9] ?? 0),
+        trustScore: realtimeTrustScores.get(citizenId) ?? Number(row[9] ?? 0),
         createdAt: String(row[10] ?? ''),
         profileSource: String(row[11] ?? ''),
         cardPayload: row[12] == null ? null : String(row[12]),
         documentPath: row[13] == null ? null : String(row[13]),
         decidedAt: row[14] == null ? null : String(row[14]),
-        documents: documentsByCitizen.get(String(row[0])) ?? [],
+        documents: documentsByCitizen.get(citizenId) ?? [],
         employment: row[15]
           ? {
               jobTitle: String(row[15]),
@@ -408,22 +548,17 @@ app.post('/api/upload', upload.array('documents'), async (req, res) => {
     const documentPaths = Array.isArray(req.files)
       ? req.files.map((f) => `/uploads/${f.filename}`)
       : []
-    const trustScore = calculateInitialTrustScore({
-      name,
-      phone,
-      occupation,
-      address,
-      documentCount: documentPaths.length,
-    })
 
     const citizenStmt = recordsDb.prepare(
       'INSERT INTO citizens (id, card_id, name, phone, age, gender, address, occupation, verification_status, trust_score, created_at, profile_source, card_payload, document_path, decided_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
     )
-    citizenStmt.run([citizenId, cardId, name, phone, null, null, address, occupation, 'pending', trustScore, createdAt, 'upload', cardPayload, JSON.stringify(documentPaths), null])
+    citizenStmt.run([citizenId, cardId, name, phone, null, null, address, occupation, 'pending', 0, createdAt, 'upload', cardPayload, JSON.stringify(documentPaths), null])
     citizenStmt.free()
 
     await persistRecordsDb()
     rediscoverConnectionsInBackground(citizenId)
+    const realtimeTrustScores = calculateRealtimeTrustScores()
+    const trustScore = realtimeTrustScores.get(citizenId) ?? 0
 
     res.json({
       ok: true,
@@ -498,11 +633,12 @@ app.get('/api/citizens', async (_req, res) => {
 
     const result = recordsDb.exec(`
       SELECT id, card_id, name, phone, age, gender, address, occupation,
-             verification_status, trust_score, created_at
+             verification_status, 0 AS trust_score, created_at
       FROM citizens
       ORDER BY name COLLATE NOCASE;
     `)
-    const citizens = (result[0]?.values ?? []).map(mapCitizenRow)
+    const realtimeTrustScores = calculateRealtimeTrustScores()
+    const citizens = (result[0]?.values ?? []).map((row) => mapCitizenRow(row, realtimeTrustScores))
     res.json({ ok: true, citizens })
   } catch (cause) {
     res.status(500).json({ ok: false, error: cause instanceof Error ? cause.message : 'Failed to load citizens' })
@@ -518,7 +654,7 @@ app.get('/api/citizens/:id', async (req, res) => {
 
     const citizenStmt = recordsDb.prepare(`
       SELECT id, card_id, name, phone, age, gender, address, occupation,
-             verification_status, trust_score, created_at
+             verification_status, 0 AS trust_score, created_at
       FROM citizens
       WHERE id = ?
       LIMIT 1;
@@ -529,8 +665,10 @@ app.get('/api/citizens/:id', async (req, res) => {
       res.status(404).json({ ok: false, error: 'Citizen not found' })
       return
     }
-    const citizen = mapCitizenRow(citizenStmt.get())
+    const citizenRow = citizenStmt.get()
     citizenStmt.free()
+    const realtimeTrustScores = calculateRealtimeTrustScores()
+    const citizen = mapCitizenRow(citizenRow, realtimeTrustScores)
 
     let occupationDetail = null
     const employmentStmt = recordsDb.prepare('SELECT job_title, employer, work_address FROM employment_details WHERE citizen_id = ? LIMIT 1;')
@@ -697,9 +835,8 @@ app.post('/api/admin/submissions/:id/decision', async (req, res) => {
 
     const decidedAt = new Date().toISOString()
     const status = decision === 'verified' ? 'verified' : 'denied'
-    const trustScore = decision === 'verified' ? 55 : 10
-    const citizenStmt = recordsDb.prepare('UPDATE citizens SET verification_status = ?, trust_score = ?, decided_at = ? WHERE id = ?;')
-    citizenStmt.run([status, trustScore, decidedAt, String(req.params.id)])
+    const citizenStmt = recordsDb.prepare('UPDATE citizens SET verification_status = ?, decided_at = ? WHERE id = ?;')
+    citizenStmt.run([status, decidedAt, String(req.params.id)])
     citizenStmt.free()
 
     await persistRecordsDb()
