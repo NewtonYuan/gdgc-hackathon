@@ -2,15 +2,15 @@ import './App.css'
 import { PhoneRealtimeView } from './realtime/RealtimeViews'
 import UploadView from './realtime/UploadView'
 import AdminView from './realtime/AdminView'
-import DesktopAdminView from './realtime/DesktopAdminView'
+import AdminRealtimeView from './realtime/AdminRealtimeView'
 import CitizensView from './realtime/CitizensView'
 import AdminGraphView from './realtime/AdminGraphView'
 
 function App() {
   const path = window.location.pathname.toLowerCase()
 
-  if (path === '/desktop') {
-    return <DesktopAdminView />
+  if (path === '/admin/realtime' || path === '/admin/desktop' || path === '/desktop') {
+    return <AdminRealtimeView />
   }
 
   if (path === '/checker') {

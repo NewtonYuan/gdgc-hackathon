@@ -55,13 +55,210 @@ function socketUrl(role: 'desktop' | 'phone', deviceId: string): string {
 
 type DesktopRealtimeViewProps = {
   embedded?: boolean
+  title?: string
+  adminHeader?: boolean
+  showSnackbars?: boolean
 }
 
-export function DesktopRealtimeView({ embedded = false }: DesktopRealtimeViewProps) {
+export function AdminRealtimeBridge() {
+  const [records, setRecords] = useState<RecordEntry[]>([])
+  const [snackbars, setSnackbars] = useState<Array<{ id: string; title: string; message: string; tone: 'neutral' | 'verified' | 'pending' | 'invalid'; visible: boolean }>>([])
+
+  const showSnackbar = useCallback((title: string, message: string, tone: 'neutral' | 'verified' | 'pending' | 'invalid' = 'neutral') => {
+    const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    setSnackbars((prev) => [...prev, { id, title, message, tone, visible: false }].slice(-3))
+    window.setTimeout(() => {
+      setSnackbars((prev) => prev.map((item) => (item.id === id ? { ...item, visible: true } : item)))
+    }, 10)
+    window.setTimeout(() => {
+      setSnackbars((prev) => prev.map((item) => (item.id === id ? { ...item, visible: false } : item)))
+    }, 4500)
+    window.setTimeout(() => {
+      setSnackbars((prev) => prev.filter((item) => item.id !== id))
+    }, 4900)
+  }, [])
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const custom = event as CustomEvent<{ kind?: string; name?: string }>
+      const kind = custom.detail?.kind
+      const name = custom.detail?.name?.trim() || 'Unknown Person'
+      if (kind === 'checker-connected') {
+        showSnackbar('Info', 'Checker connected', 'neutral')
+        return
+      }
+      if (kind === 'checker-disconnected') {
+        showSnackbar('Info', 'Checker disconnected', 'neutral')
+        return
+      }
+      if (kind === 'verification-success') {
+        showSnackbar('Success', `Successful verification by ${name}`, 'verified')
+        return
+      }
+      if (kind === 'verification-invalid') {
+        showSnackbar('Error', `Invalid verification by ${name}`, 'invalid')
+      }
+    }
+
+    window.addEventListener('desktop-snackbar-test', handler as EventListener)
+    return () => window.removeEventListener('desktop-snackbar-test', handler as EventListener)
+  }, [showSnackbar])
+
+  const personMap = useMemo(() => {
+    const map = new Map<string, RecordEntry>()
+    for (const row of records) {
+      map.set(toPersonId(row.name), row)
+    }
+    return map
+  }, [records])
+
+  useEffect(() => {
+    let active = true
+    fetch('/api/admin/submissions')
+      .then((res) => res.json())
+      .then((json: { ok: boolean; submissions?: Array<{ name: string; occupation: string; decision: 'pending' | 'verified' | 'invalid' }> }) => {
+        if (!active) return
+        if (json.ok && Array.isArray(json.submissions)) {
+          setRecords(
+            json.submissions.map((item) => ({
+              name: item.name,
+              occupation: item.occupation,
+              decision: item.decision ?? 'pending',
+            })),
+          )
+          return
+        }
+        setRecords([])
+      })
+      .catch(() => {
+        if (active) setRecords([])
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    const desktopId = createClientId()
+    const ws = new WebSocket(socketUrl('desktop', desktopId))
+
+    ws.onmessage = (event) => {
+      const payload = JSON.parse(String(event.data)) as ScanEvent
+      if (payload.type !== 'scan') return
+
+      const person = personMap.get(payload.personId)
+      const verified = person?.decision === 'verified'
+      const status: VerdictEvent['status'] = person?.decision === 'verified'
+        ? 'VERIFIED'
+        : person?.decision === 'invalid'
+          ? 'INVALID'
+          : 'PENDING'
+
+      const verdict: VerdictEvent = {
+        type: 'verdict',
+        personId: payload.personId,
+        phoneId: payload.phoneId,
+        verified: Boolean(verified),
+        name: person?.name ?? 'Unknown Person',
+        status,
+      }
+      ws.send(JSON.stringify(verdict))
+      showSnackbar(
+        status === 'VERIFIED' ? 'Success' : status === 'PENDING' ? 'Pending' : 'Error',
+        status === 'VERIFIED'
+          ? 'Verdict sent: Verified'
+          : status === 'PENDING'
+            ? 'Verdict sent: Pending'
+            : 'Verdict sent: Invalid',
+        status === 'VERIFIED' ? 'verified' : status === 'PENDING' ? 'pending' : 'invalid',
+      )
+    }
+
+    return () => ws.close()
+  }, [personMap, showSnackbar])
+
+  return (
+    <>
+      {[...snackbars].reverse().map((snackbar, index) => (
+        <div
+          key={snackbar.id}
+          className={`fixed right-6 z-50 w-[360px] max-w-[calc(100vw-2rem)] rounded-2xl px-4 py-3 text-white transition-all duration-300 ease-out ${
+            snackbar.visible ? 'translate-x-0 opacity-100' : 'translate-x-10 opacity-0'
+          } ${
+            snackbar.tone === 'verified'
+              ? 'bg-[#63a96b]'
+              : snackbar.tone === 'pending'
+                ? 'bg-[#b99356]'
+                : snackbar.tone === 'invalid'
+                  ? 'bg-[#bf6a71]'
+                  : 'bg-[#5f80c9]'
+          }`}
+          style={{ bottom: `${1.5 + index * 5.6}rem` }}
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-center gap-3">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/85 text-xl font-black text-black">
+              {snackbar.tone === 'verified' ? '✓' : snackbar.tone === 'pending' ? '…' : snackbar.tone === 'invalid' ? '!' : 'i'}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-[22px] font-extrabold leading-6">{snackbar.title}</p>
+              <p className="mt-1 text-[15px] leading-5 text-white/95">{snackbar.message}</p>
+            </div>
+          </div>
+        </div>
+      ))}
+    </>
+  )
+}
+
+export function DesktopRealtimeView({ embedded = false, title = 'Desktop Verifier', adminHeader = false, showSnackbars = true }: DesktopRealtimeViewProps) {
   const [records, setRecords] = useState<RecordEntry[]>([])
   const [error, setError] = useState<string | null>(null)
   const [connection, setConnection] = useState('connecting')
   const [lastScan, setLastScan] = useState<{ personId: string; phoneId: string; cardData?: Record<string, unknown> } | null>(null)
+  const [snackbars, setSnackbars] = useState<Array<{ id: string; title: string; message: string; tone: 'neutral' | 'verified' | 'pending' | 'invalid'; visible: boolean }>>([])
+
+  const showSnackbar = useCallback((title: string, message: string, tone: 'neutral' | 'verified' | 'pending' | 'invalid' = 'neutral') => {
+    const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    setSnackbars((prev) => [...prev, { id, title, message, tone, visible: false }].slice(-3))
+    window.setTimeout(() => {
+      setSnackbars((prev) => prev.map((item) => (item.id === id ? { ...item, visible: true } : item)))
+    }, 10)
+    window.setTimeout(() => {
+      setSnackbars((prev) => prev.map((item) => (item.id === id ? { ...item, visible: false } : item)))
+    }, 4500)
+    window.setTimeout(() => {
+      setSnackbars((prev) => prev.filter((item) => item.id !== id))
+    }, 4900)
+  }, [])
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const custom = event as CustomEvent<{ kind?: string; name?: string }>
+      const kind = custom.detail?.kind
+      const name = custom.detail?.name?.trim() || 'Unknown Person'
+      if (kind === 'checker-connected') {
+        showSnackbar('Info', 'Checker connected', 'neutral')
+        return
+      }
+      if (kind === 'checker-disconnected') {
+        showSnackbar('Info', 'Checker disconnected', 'neutral')
+        return
+      }
+      if (kind === 'verification-success') {
+        showSnackbar('Success', `Successful verification by ${name}`, 'verified')
+        return
+      }
+      if (kind === 'verification-invalid') {
+        showSnackbar('Error', `Invalid verification by ${name}`, 'invalid')
+      }
+    }
+
+    window.addEventListener('desktop-snackbar-test', handler as EventListener)
+    return () => window.removeEventListener('desktop-snackbar-test', handler as EventListener)
+  }, [showSnackbar])
 
   const personMap = useMemo(() => {
     const map = new Map<string, RecordEntry>()
@@ -93,6 +290,7 @@ export function DesktopRealtimeView({ embedded = false }: DesktopRealtimeViewPro
       .catch((cause: unknown) => {
         if (active) {
           setError(cause instanceof Error ? cause.message : 'Failed to load records')
+          showSnackbar('Error', 'Failed to load records', 'invalid')
         }
       })
     return () => {
@@ -104,9 +302,15 @@ export function DesktopRealtimeView({ embedded = false }: DesktopRealtimeViewPro
     const desktopId = createClientId()
     const ws = new WebSocket(socketUrl('desktop', desktopId))
 
-    ws.onopen = () => setConnection('connected')
-    ws.onclose = () => setConnection('disconnected')
-    ws.onerror = () => setConnection('error')
+    ws.onopen = () => {
+      setConnection('connected')
+    }
+    ws.onclose = () => {
+      setConnection('disconnected')
+    }
+    ws.onerror = () => {
+      setConnection('error')
+    }
     ws.onmessage = (event) => {
       const payload = JSON.parse(String(event.data)) as ScanEvent
       if (payload.type !== 'scan') {
@@ -114,6 +318,7 @@ export function DesktopRealtimeView({ embedded = false }: DesktopRealtimeViewPro
       }
 
       setLastScan({ personId: payload.personId, phoneId: payload.phoneId, cardData: payload.cardData })
+      if (showSnackbars) showSnackbar('Info', 'Card scanned on phone', 'neutral')
       const person = personMap.get(payload.personId)
       const verified = person?.decision === 'verified'
       const status: VerdictEvent['status'] = person?.decision === 'verified'
@@ -131,6 +336,15 @@ export function DesktopRealtimeView({ embedded = false }: DesktopRealtimeViewPro
         status,
       }
       ws.send(JSON.stringify(verdict))
+      if (showSnackbars) showSnackbar(
+        status === 'VERIFIED' ? 'Success' : status === 'PENDING' ? 'Pending' : 'Error',
+        status === 'VERIFIED'
+          ? 'Verdict sent: Verified'
+          : status === 'PENDING'
+            ? 'Verdict sent: Pending'
+            : 'Verdict sent: Invalid',
+        status === 'VERIFIED' ? 'verified' : status === 'PENDING' ? 'pending' : 'invalid',
+      )
     }
 
     return () => ws.close()
@@ -140,10 +354,17 @@ export function DesktopRealtimeView({ embedded = false }: DesktopRealtimeViewPro
 
   const content = (
     <>
-      <header className="topbar">
-        <h1>Desktop Verifier</h1>
-        <p className="tagline">Connection: {connection}</p>
-      </header>
+      {adminHeader ? (
+        <header className="admin-page-head border-0">
+          <h1 className="text-4xl">{title}</h1>
+          <p className="tagline">Connection: {connection}</p>
+        </header>
+      ) : (
+        <header className="topbar">
+          <h1>{title}</h1>
+          <p className="tagline">Connection: {connection}</p>
+        </header>
+      )}
 
       {error && <article className="panel">DB Error: {error}</article>}
 
@@ -170,6 +391,41 @@ export function DesktopRealtimeView({ embedded = false }: DesktopRealtimeViewPro
           <p className="tagline">Waiting for phone tap events...</p>
         )}
       </article>
+      {showSnackbars ? [...snackbars].reverse().map((snackbar, index) => (
+        <div
+          key={snackbar.id}
+          className={`fixed right-6 z-50 w-[360px] max-w-[calc(100vw-2rem)] rounded-2xl px-4 py-3 text-white transition-all duration-300 ease-out ${
+            snackbar.visible ? 'translate-x-0 opacity-100' : 'translate-x-10 opacity-0'
+          } ${
+            snackbar.tone === 'verified'
+              ? 'bg-[#63a96b]'
+              : snackbar.tone === 'pending'
+                ? 'bg-[#b99356]'
+                : snackbar.tone === 'invalid'
+                  ? 'bg-[#bf6a71]'
+                  : 'bg-[#5f80c9]'
+          }`}
+          style={{ bottom: `${1.5 + index * 5.6}rem` }}
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-center gap-3">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/85 text-xl font-black text-black">
+              {snackbar.tone === 'verified'
+                ? '✓'
+                : snackbar.tone === 'pending'
+                  ? '…'
+                  : snackbar.tone === 'invalid'
+                    ? '!'
+                    : 'i'}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-[22px] font-extrabold leading-6">{snackbar.title}</p>
+              <p className="mt-1 text-[15px] leading-5 text-white/95">{snackbar.message}</p>
+            </div>
+          </div>
+        </div>
+      )) : null}
     </>
   )
 
