@@ -40,12 +40,13 @@ function mapSubmissionRow(row) {
     name: String(row[1]),
     phone: String(row[2]),
     occupation: String(row[3]),
-    cardId: String(row[4]),
-    cardPayload: String(row[5] ?? '{}'),
-    documentPath: row[6] ? String(row[6]) : null,
-    createdAt: String(row[7]),
-    decision: row[8] ? String(row[8]) : null,
-    decidedAt: row[9] ? String(row[9]) : null,
+    address: String(row[4] ?? ''),
+    cardId: String(row[5]),
+    cardPayload: String(row[6] ?? '{}'),
+    documentPath: row[7] ? String(row[7]) : null,
+    createdAt: String(row[8]),
+    decision: row[9] ? String(row[9]) : null,
+    decidedAt: row[10] ? String(row[10]) : null,
   }
 }
 
@@ -80,6 +81,7 @@ async function initUploadDb() {
       name TEXT NOT NULL,
       phone TEXT NOT NULL,
       occupation TEXT NOT NULL,
+      address TEXT NOT NULL,
       card_id TEXT NOT NULL,
       card_payload TEXT NOT NULL,
       document_path TEXT,
@@ -89,12 +91,18 @@ async function initUploadDb() {
     );
   `)
 
-  try {
+  // Migrations for older DB files.
+  const columns = uploadDb.exec('PRAGMA table_info(submissions);')
+  const colNames = columns.length > 0 ? columns[0].values.map((row) => String(row[1])) : []
+  if (!colNames.includes('address')) {
+    uploadDb.exec("ALTER TABLE submissions ADD COLUMN address TEXT NOT NULL DEFAULT '';")
+  }
+  if (!colNames.includes('decision')) {
     uploadDb.exec('ALTER TABLE submissions ADD COLUMN decision TEXT;')
-  } catch {}
-  try {
+  }
+  if (!colNames.includes('decided_at')) {
     uploadDb.exec('ALTER TABLE submissions ADD COLUMN decided_at TEXT;')
-  } catch {}
+  }
 
   await persistUploadDb()
 }
@@ -169,10 +177,11 @@ app.post('/api/upload', upload.single('documents'), async (req, res) => {
     const name = String(req.body.name ?? '')
     const phone = String(req.body.phone ?? '')
     const occupation = String(req.body.occupation ?? '')
+    const address = String(req.body.address ?? '')
     const cardId = String(req.body.cardID ?? '')
     const cardPayload = String(req.body.cardPayload ?? '{}')
 
-    if (!name || !phone || !occupation || !cardId) {
+    if (!name || !phone || !occupation || !address || !cardId) {
       res.status(400).json({ ok: false, error: 'Missing required fields' })
       return
     }
@@ -182,9 +191,9 @@ app.post('/api/upload', upload.single('documents'), async (req, res) => {
     const documentPath = req.file ? `/uploads/${req.file.filename}` : null
 
     const stmt = uploadDb.prepare(
-      'INSERT INTO submissions (id, name, phone, occupation, card_id, card_payload, document_path, created_at, decision, decided_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+      'INSERT INTO submissions (id, name, phone, occupation, address, card_id, card_payload, document_path, created_at, decision, decided_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
     )
-    stmt.run([id, name, phone, occupation, cardId, cardPayload, documentPath, createdAt, null, null])
+    stmt.run([id, name, phone, occupation, address, cardId, cardPayload, documentPath, createdAt, null, null])
     stmt.free()
 
     await persistUploadDb()
@@ -196,6 +205,7 @@ app.post('/api/upload', upload.single('documents'), async (req, res) => {
         name,
         phone,
         occupation,
+        address,
         cardId,
         documentPath,
         createdAt,
@@ -214,7 +224,7 @@ app.get('/api/admin/submissions', async (_req, res) => {
     }
 
     const result = uploadDb.exec(
-      'SELECT id, name, phone, occupation, card_id, card_payload, document_path, created_at, decision, decided_at FROM submissions ORDER BY created_at DESC;',
+      'SELECT id, name, phone, occupation, address, card_id, card_payload, document_path, created_at, decision, decided_at FROM submissions ORDER BY created_at DESC;',
     )
     const rows = result[0]?.values ?? []
     const submissions = rows.map(mapSubmissionRow).map((row) => ({
@@ -222,6 +232,7 @@ app.get('/api/admin/submissions', async (_req, res) => {
       name: row.name,
       phone: row.phone,
       occupation: row.occupation,
+      address: row.address,
       cardId: row.cardId,
       createdAt: row.createdAt,
       decision: row.decision,
@@ -240,7 +251,7 @@ app.get('/api/admin/submissions/:id', async (req, res) => {
     }
 
     const stmt = uploadDb.prepare(
-      'SELECT id, name, phone, occupation, card_id, card_payload, document_path, created_at, decision, decided_at FROM submissions WHERE id = ? LIMIT 1;',
+      'SELECT id, name, phone, occupation, address, card_id, card_payload, document_path, created_at, decision, decided_at FROM submissions WHERE id = ? LIMIT 1;',
     )
     stmt.bind([String(req.params.id)])
     if (!stmt.step()) {
