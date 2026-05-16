@@ -2160,7 +2160,8 @@ th {
     width: 100%;
   }
 
-  .upload-view .back-button {
+  .upload-view .back-button,
+  .filerow-remove {
     width: fit-content;
   }
 }
