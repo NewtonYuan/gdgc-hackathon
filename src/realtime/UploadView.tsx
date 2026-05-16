@@ -221,7 +221,7 @@ export default function UploadView() {
       return
     }
 
-    // NFC write succeeded — auto-save to the DB and animate the upload rings.
+    // NFC write succeeded; auto-save to the DB and animate the upload rings.
     setQueue((prev) => prev.map((q) => ({ ...q, progress: 0, done: false })))
     const ticker = window.setInterval(() => {
       setQueue((prev) =>
@@ -252,13 +252,9 @@ export default function UploadView() {
   return (
     <main className="terminal-shell upload-view">
       <header className="topbar">
-        <button
-          type="button"
-          className="back-button"
-          onClick={() => window.location.assign('/')}
-        >
-          ← Back
-        </button>
+        <a className="back-button button secondary" href="/">
+          Back
+        </a>
         <h1>Upload</h1>
         <p className="tagline">Write card + store applicant details in separate database.</p>
       </header>
@@ -271,7 +267,7 @@ export default function UploadView() {
           </label>
           <label>
             Phone
-            <input value={form.phone} onChange={(e) => onChange('phone', e.target.value)} required />
+            <input type="tel" value={form.phone} onChange={(e) => onChange('phone', e.target.value)} required />
           </label>
           <label>
             Occupation
@@ -335,28 +331,31 @@ export default function UploadView() {
                   {queue.length === 0 ? (
                     <p className="filelist-empty">No files added yet.</p>
                   ) : (
-                    queue.map((q) => (
-                      <div className="filerow" key={q.id}>
-                        <FolderIcon className="filerow-icon" />
-                        <span className="filerow-name" title={q.file.name}>
-                          {q.file.name}
-                        </span>
-                        {q.done ? (
-                          <CheckIcon className="filerow-check" />
-                        ) : submitting ? (
-                          <ProgressRing percent={q.progress} />
-                        ) : (
-                          <button
-                            type="button"
-                            className="filerow-remove"
-                            onClick={() => removeFile(q.id)}
-                            aria-label={`Remove ${q.file.name}`}
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </div>
-                    ))
+                    queue.map((q) => {
+                      const displayName = q.file.name || 'Unnamed file'
+                      return (
+                        <div className="filerow" key={q.id}>
+                          <FolderIcon className="filerow-icon" />
+                          <span className="filerow-name" title={displayName}>
+                            {displayName}
+                          </span>
+                          {q.done ? (
+                            <CheckIcon className="filerow-check" />
+                          ) : submitting ? (
+                            <ProgressRing percent={q.progress} />
+                          ) : (
+                            <button
+                              type="button"
+                              className="filerow-remove"
+                              onClick={() => removeFile(q.id)}
+                              aria-label={`Remove ${displayName}`}
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })
                   )}
                 </div>
               </div>
@@ -370,7 +369,7 @@ export default function UploadView() {
           </div>
         </form>
 
-        {message && <p className="tagline">{message}</p>}
+        {message && <p className="tagline form-message" role="status" aria-live="polite">{message}</p>}
       </article>
     </main>
   )

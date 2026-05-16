@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 type AdminLayoutProps = {
-  active: 'submissions' | 'desktop' | 'graph'
+  active: 'submissions' | 'desktop' | 'citizens' | 'graph'
   children: ReactNode
 }
 
@@ -11,38 +11,47 @@ export default function AdminLayout({ active, children }: AdminLayoutProps) {
       <div className="admin-layout">
         <aside className="admin-sidebar panel">
           <div className="admin-brand">
+            <img src="/icons/logo.svg" alt="App logo" className="app-logo" />
             <strong>records.io</strong>
           </div>
 
           <nav className="admin-nav" aria-label="Admin sections">
-            <button
-              type="button"
+            <a
+              href="/admin"
               className={`admin-nav-item ${active === 'submissions' ? 'active' : ''}`}
-              onClick={() => window.location.assign('/admin')}
+              aria-current={active === 'submissions' ? 'page' : undefined}
             >
               <img src="/icons/database.svg" alt="" aria-hidden="true" className="admin-nav-icon" />
               Submissions
-            </button>
-            <button
-              type="button"
+            </a>
+            <a
+              href="/desktop"
               className={`admin-nav-item ${active === 'desktop' ? 'active' : ''}`}
-              onClick={() => window.location.assign('/desktop')}
+              aria-current={active === 'desktop' ? 'page' : undefined}
             >
               <img src="/icons/timelapse.svg" alt="" aria-hidden="true" className="admin-nav-icon" />
               Desktop View
-            </button>
-            <button
-              type="button"
+            </a>
+            <a
+              href="/citizens"
+              className={`admin-nav-item ${active === 'citizens' ? 'active' : ''}`}
+              aria-current={active === 'citizens' ? 'page' : undefined}
+            >
+              <img src="/icons/database.svg" alt="" aria-hidden="true" className="admin-nav-icon" />
+              Citizens DB
+            </a>
+            <a
+              href="/admin/graph"
               className={`admin-nav-item ${active === 'graph' ? 'active' : ''}`}
-              onClick={() => window.location.assign('/admin/graph')}
+              aria-current={active === 'graph' ? 'page' : undefined}
             >
               <img src="/icons/database.svg" alt="" aria-hidden="true" className="admin-nav-icon" />
               Graph
-            </button>
+            </a>
           </nav>
 
           <div className="actions">
-            <button type="button" onClick={() => window.location.assign('/')}>Back</button>
+            <a className="button secondary" href="/">Back</a>
           </div>
         </aside>
 
