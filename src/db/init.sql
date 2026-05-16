@@ -16,3 +16,4 @@ CREATE TABLE records (
 
 INSERT INFO records (first_name, last_name, age) VALUES
   ('Sarah', 'Chen', '50')
+  
