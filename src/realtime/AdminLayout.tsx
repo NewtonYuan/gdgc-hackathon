@@ -26,6 +26,7 @@ export default function AdminLayout({ active, children, stats }: AdminLayoutProp
               className={`admin-nav-item ${active === 'submissions' ? 'active' : ''}`}
               onClick={() => window.location.assign('/admin')}
             >
+              <img src="/icons/database.svg" alt="" aria-hidden="true" className="admin-nav-icon" />
               Submissions
             </button>
             <button
@@ -33,6 +34,7 @@ export default function AdminLayout({ active, children, stats }: AdminLayoutProp
               className={`admin-nav-item ${active === 'desktop' ? 'active' : ''}`}
               onClick={() => window.location.assign('/desktop')}
             >
+              <img src="/icons/timelapse.svg" alt="" aria-hidden="true" className="admin-nav-icon" />
               Desktop View
             </button>
           </nav>

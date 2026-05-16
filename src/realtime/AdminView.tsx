@@ -9,7 +9,7 @@ type SubmissionSummary = {
   occupation: string
   cardId: string
   createdAt: string
-  decision: 'ACCEPTED' | 'DECLINED' | null
+  decision: 'pending' | 'verified' | 'invalid'
 }
 
 type SubmissionDetail = SubmissionSummary & {
@@ -135,7 +135,7 @@ export default function AdminView() {
     setError(null)
   }
 
-  const decide = async (decision: 'ACCEPTED' | 'DECLINED') => {
+  const decide = async (decision: 'verified' | 'invalid') => {
     if (!detail) {
       return
     }
@@ -163,9 +163,37 @@ export default function AdminView() {
 
   const stats = {
     total: rows.length,
-    pending: rows.filter((r) => !r.decision).length,
-    accepted: rows.filter((r) => r.decision === 'ACCEPTED').length,
-    declined: rows.filter((r) => r.decision === 'DECLINED').length,
+    pending: rows.filter((r) => r.decision === 'pending').length,
+    accepted: rows.filter((r) => r.decision === 'verified').length,
+    declined: rows.filter((r) => r.decision === 'invalid').length,
+  }
+
+  const deleteSubmission = async () => {
+    if (!detail) {
+      return
+    }
+
+    const confirmed = window.confirm('Delete this submission permanently?')
+    if (!confirmed) {
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+    try {
+      const json = await fetchJsonOrThrow<{ ok: boolean; error?: string }>(`/api/admin/submissions/${encodeURIComponent(detail.id)}`, {
+        method: 'DELETE',
+      })
+      if (!json.ok) {
+        throw new Error(json.error ?? 'Failed to delete submission')
+      }
+      setRows((prev) => prev.filter((row) => row.id !== detail.id))
+      backToList()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Failed to delete submission')
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (loading) {
@@ -181,7 +209,7 @@ export default function AdminView() {
   return (
     <AdminLayout active="submissions" stats={stats}>
       <header className="topbar">
-        <h1>Admin View</h1>
+        <h1>Submissions</h1>
       </header>
 
       {error && (
@@ -192,7 +220,6 @@ export default function AdminView() {
 
       {!selectedId ? (
         <article className="panel">
-          <h2>Applicant Database</h2>
           <div className="admin-table-wrap">
             <table>
               <thead>
@@ -201,8 +228,8 @@ export default function AdminView() {
                   <th>Phone</th>
                   <th>Occupation</th>
                   <th>cardID</th>
-                  <th>Status</th>
-                  <th>Action</th>
+                      <th className="status-col">Status</th>
+                      <th className="status-col">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -217,10 +244,10 @@ export default function AdminView() {
                       <td>{row.phone}</td>
                       <td>{row.occupation}</td>
                       <td>{row.cardId}</td>
-                      <td>{row.decision ?? 'PENDING'}</td>
-                      <td>
+                      <td className={`status-col ${row.decision}`}>{row.decision.toUpperCase()}</td>
+                      <td className="status-col">
                         <button type="button" className="verify" onClick={() => openVerify(row.id)}>
-                          Verify
+                          Review
                         </button>
                       </td>
                     </tr>
@@ -236,6 +263,7 @@ export default function AdminView() {
           saving={saving}
           onBack={backToList}
           onDecide={decide}
+          onDelete={deleteSubmission}
         />
       ) : null}
     </AdminLayout>
