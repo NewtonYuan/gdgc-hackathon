@@ -250,7 +250,7 @@ export default function UploadView() {
   }
 
   return (
-    <main className="terminal-shell">
+    <main className="terminal-shell upload-view">
       <header className="topbar">
         <button
           type="button"
