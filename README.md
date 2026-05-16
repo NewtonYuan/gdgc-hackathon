@@ -47,7 +47,45 @@ Each verified person expands the surviving database.
 Each mistake destabilizes society further.
 
 ---
+## Game Flow
+SETUP PHASE
+└── Player receives initial corrupted db
+    (some fields present, some missing, some unverified)
 
+─────────────────────────────────────────
+
+PERSON ARRIVES
+└── Player sees person's claim card
+    (what they say about themselves)
+
+─────────────────────────────────────────
+
+PLAYER DECISION POINT
+├── ACCEPT
+│   ├── Cross-check passed, person is verified
+│   ├── Their info is written into db as trusted
+│   └── They feed you new info about other people
+│       └── Those claims sit as "unverified" in db
+│           until those people show up
+│
+├── QUESTION
+│   ├── Player picks from fixed question set
+│   ├── Person answers
+│   ├── Player manually cross-checks answer against db
+│   └── Loop back to DECISION POINT
+│       (player can question multiple times before deciding)
+│
+└── DECLINE
+    ├── Person is rejected
+    ├── NO info added to db
+    └── Move to next person
+
+─────────────────────────────────────────
+
+NEXT PERSON ARRIVES
+└── Repeat loop
+
+---
 ## Features
 
 - Sequential deduction gameplay
