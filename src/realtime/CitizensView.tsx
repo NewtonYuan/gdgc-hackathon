@@ -3,12 +3,11 @@ import AdminLayout from './AdminLayout'
 
 type CitizenSummary = {
   id: string
-  firstName: string
-  lastName: string
-  age: number
-  gender: string
-  photoUrl: string
-  occupationType: string
+  name: string
+  phone: string
+  age: number | null
+  gender: string | null
+  occupation: string
   verificationStatus: string
   trustScore: number
 }
@@ -28,9 +27,7 @@ type Document = {
 }
 
 type CitizenDetail = CitizenSummary & {
-  street: string
-  city: string
-  country: string
+  address: string
   createdAt: string
   occupationDetail: OccupationDetail
   documents: Document[]
@@ -116,7 +113,7 @@ export default function CitizensView() {
   useEffect(() => {
     if (!selectedId) return
     let active = true
-    fetchJsonOrThrow<{ ok: boolean; citizen?: CitizenSummary & { street: string; city: string; country: string; createdAt: string }; occupationDetail?: OccupationDetail; documents?: Document[]; error?: string }>(`/api/citizens/${encodeURIComponent(selectedId)}`)
+    fetchJsonOrThrow<{ ok: boolean; citizen?: CitizenSummary & { address: string; createdAt: string }; occupationDetail?: OccupationDetail; documents?: Document[]; error?: string }>(`/api/citizens/${encodeURIComponent(selectedId)}`)
       .then((json) => {
         if (!active) return
         if (!json.ok || !json.citizen) throw new Error(json.error ?? 'Citizen not found')
@@ -169,8 +166,8 @@ export default function CitizensView() {
               <caption>Registered citizens and verification status</caption>
               <thead>
                 <tr>
-                  <th scope="col">Photo</th>
                   <th scope="col">Name</th>
+                  <th scope="col">Phone</th>
                   <th scope="col">Age</th>
                   <th scope="col">Occupation</th>
                   <th scope="col">Status</th>
@@ -184,10 +181,10 @@ export default function CitizensView() {
                 ) : (
                   rows.map((row) => (
                     <tr key={row.id}>
-                      <td><img className="avatar" src={row.photoUrl} alt={`${row.firstName} ${row.lastName}`} width={40} height={40} /></td>
-                      <td>{row.firstName} {row.lastName}</td>
-                      <td>{row.age}</td>
-                      <td>{row.occupationType}</td>
+                      <td>{row.name || '-'}</td>
+                      <td>{row.phone || '-'}</td>
+                      <td>{row.age ?? '-'}</td>
+                      <td>{row.occupation || '-'}</td>
                       <td>
                         <StatusBadge status={row.verificationStatus} />
                       </td>
@@ -205,18 +202,18 @@ export default function CitizensView() {
       ) : detail ? (
         <article className="panel">
           <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start', marginBottom: '1rem' }}>
-            <img className="avatar large" src={detail.photoUrl} alt={`${detail.firstName} ${detail.lastName}`} width={80} height={80} />
             <div>
-              <h2 style={{ margin: 0 }}>{detail.firstName} {detail.lastName}</h2>
-              <p className="tagline" style={{ margin: '0.25rem 0 0' }}>{detail.city}, {detail.country}</p>
+              <h2 style={{ margin: 0 }}>{detail.name || 'Unnamed citizen'}</h2>
+              <p className="tagline" style={{ margin: '0.25rem 0 0' }}>{detail.address || 'No address recorded'}</p>
             </div>
           </div>
 
           <div className="facts">
-            <p><span>Age:</span> {detail.age}</p>
-            <p><span>Gender:</span> {detail.gender}</p>
-            <p><span>Address:</span> {detail.street}, {detail.city}, {detail.country}</p>
-            <p><span>Occupation type:</span> {detail.occupationType}</p>
+            <p><span>Phone:</span> {detail.phone || '-'}</p>
+            <p><span>Age:</span> {detail.age ?? '-'}</p>
+            <p><span>Gender:</span> {detail.gender ?? '-'}</p>
+            <p><span>Address:</span> {detail.address || '-'}</p>
+            <p><span>Occupation:</span> {detail.occupation || '-'}</p>
             <p><span>Verification status:</span> <StatusBadge status={detail.verificationStatus} /></p>
             <p><span>Trust score:</span> {detail.trustScore} / 100</p>
           </div>
@@ -235,7 +232,7 @@ export default function CitizensView() {
               <h3>Documents</h3>
               <div className="admin-table-wrap">
                 <table>
-                  <caption>Documents recorded for {detail.firstName} {detail.lastName}</caption>
+                  <caption>Documents recorded for {detail.name || 'unnamed citizen'}</caption>
                   <thead>
                     <tr>
                       <th scope="col">Type</th>
