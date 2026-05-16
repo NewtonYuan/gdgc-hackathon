@@ -20,12 +20,34 @@ type UploadFormState = {
   cardID: string
 }
 
+function createGuid(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const bytes = new Uint8Array(16)
+    crypto.getRandomValues(bytes)
+    bytes[6] = (bytes[6] & 0x0f) | 0x40
+    bytes[8] = (bytes[8] & 0x3f) | 0x80
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+  }
+
+  return `guid-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
 function supportsWebNfc(): boolean {
   return typeof window !== 'undefined' && 'NDEFReader' in window
 }
 
 export default function UploadView() {
-  const [form, setForm] = useState<UploadFormState>({ name: '', phone: '', occupation: '', cardID: '' })
+  const [form, setForm] = useState<UploadFormState>({
+    name: '',
+    phone: '',
+    occupation: '',
+    cardID: createGuid(),
+  })
   const [file, setFile] = useState<File | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<string>('')
@@ -114,7 +136,7 @@ export default function UploadView() {
           </label>
           <label>
             cardID
-            <input value={form.cardID} onChange={(e) => onChange('cardID', e.target.value)} required />
+            <input value={form.cardID} readOnly required />
           </label>
           <label>
             documents
@@ -122,6 +144,7 @@ export default function UploadView() {
           </label>
 
           <div className="actions">
+            <button type="button" onClick={() => onChange('cardID', createGuid())}>Regenerate cardID</button>
             <button type="button" onClick={onWriteCard}>Write NFC Card</button>
             <button type="submit" disabled={submitting}>{submitting ? 'Saving...' : 'Save to Upload DB'}</button>
           </div>
