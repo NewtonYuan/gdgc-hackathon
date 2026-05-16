@@ -399,33 +399,12 @@ th {
   grid-template-columns: none;
 }
 
-.graph-visibility-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  align-items: center;
-}
-
-.graph-visibility-count {
-  font-size: 0.76rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.graph-restore-button,
 .graph-help-button,
-.graph-hidden-chip,
 .graph-more-button {
   border: 1px solid rgba(95, 216, 255, 0.24);
   background: #0a1220;
   color: #d7edf8;
   box-shadow: none;
-}
-
-.graph-restore-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 
 .graph-help {
@@ -462,25 +441,6 @@ th {
 
 .graph-help-popover p + p {
   margin-top: 0.45rem;
-}
-
-.graph-hidden-list {
-  position: absolute;
-  left: 1rem;
-  right: 1rem;
-  top: 1rem;
-  z-index: 3;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  pointer-events: none;
-}
-
-.graph-hidden-chip {
-  padding: 0.38rem 0.65rem;
-  font-size: 0.78rem;
-  pointer-events: auto;
-  background: rgba(10, 18, 32, 0.86);
 }
 
 .graph-inspector {
@@ -1402,10 +1362,6 @@ button.deny {
 
   .graph-legend {
     justify-content: flex-start;
-  }
-
-  .graph-visibility-actions {
-    align-items: flex-start;
   }
 
   .graph-inspector {

@@ -751,45 +751,32 @@ function GraphTab({ graph }: GraphTabProps) {
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null)
   const [sidebarNode, setSidebarNode] = useState<GraphNodeData | null>(null)
   const [isSidebarClosing, setIsSidebarClosing] = useState(false)
-  const [hiddenNodeIds, setHiddenNodeIds] = useState<string[]>([])
   const [isHelpOpen, setIsHelpOpen] = useState(false)
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
   const viewProfileButtonRef = useRef<HTMLButtonElement>(null)
   const sidebarExitTimeoutRef = useRef<number | null>(null)
-  const visibleGraph = useMemo(() => {
-    const hiddenSet = new Set(hiddenNodeIds)
-
-    return {
-      nodes: graph.nodes.filter((node) => !hiddenSet.has(node.id)),
-      edges: graph.edges.filter((edge) => !hiddenSet.has(edge.source) && !hiddenSet.has(edge.target)),
-    }
-  }, [graph, hiddenNodeIds])
   const databaseSignature = useMemo(
     () =>
-      `${visibleGraph.nodes.map((node) => `${node.id}:${node.person.verificationStatus}:${node.person.trustScore}`).join('|')}::${visibleGraph.edges.map((edge) => `${edge.source}:${edge.target}:${edge.strength}`).join('|')}`,
-    [visibleGraph],
-  )
-  const hiddenNodes = useMemo(
-    () => graph.nodes.filter((node) => hiddenNodeIds.includes(node.id)),
-    [graph.nodes, hiddenNodeIds],
+      `${graph.nodes.map((node) => `${node.id}:${node.person.verificationStatus}:${node.person.trustScore}`).join('|')}::${graph.edges.map((edge) => `${edge.source}:${edge.target}:${edge.strength}`).join('|')}`,
+    [graph],
   )
   const adjacencyByNodeId = useMemo(() => {
     const adjacency = new Map<string, Set<string>>()
 
-    for (const node of visibleGraph.nodes) {
+    for (const node of graph.nodes) {
       adjacency.set(node.id, new Set())
     }
 
-    for (const edge of visibleGraph.edges) {
+    for (const edge of graph.edges) {
       adjacency.get(edge.source)?.add(edge.target)
       adjacency.get(edge.target)?.add(edge.source)
     }
 
     return adjacency
-  }, [visibleGraph])
+  }, [graph])
   const statusCounts = useMemo(
     () =>
-      visibleGraph.nodes.reduce(
+      graph.nodes.reduce(
         (counts, node) => ({
           ...counts,
           [node.statusBucket]: counts[node.statusBucket] + 1,
@@ -800,11 +787,10 @@ function GraphTab({ graph }: GraphTabProps) {
           'not-verified': 0,
         } satisfies Record<GraphNodeData['statusBucket'], number>,
       ),
-    [visibleGraph.nodes],
+    [graph.nodes],
   )
 
-  const activeSelectedNode =
-    selectedNode && !hiddenNodeIds.includes(selectedNode.id) ? selectedNode : null
+  const activeSelectedNode = selectedNode
   const visibleSidebarNode = activeSelectedNode ?? sidebarNode
   const focusedNodeId = activeSelectedNode?.id ?? null
   const highlightedNodeIds = useMemo(() => {
@@ -836,10 +822,6 @@ function GraphTab({ graph }: GraphTabProps) {
     setIsSidebarClosing(false)
     setSidebarNode(node)
     setSelectedNode(node)
-  }
-
-  function showNode(nodeId: string) {
-    setHiddenNodeIds((current) => current.filter((id) => id !== nodeId))
   }
 
   function closeInspector(nodeForExit?: GraphNodeData) {
@@ -885,18 +867,6 @@ function GraphTab({ graph }: GraphTabProps) {
               Not Verified <strong>{statusCounts['not-verified']}</strong>
             </span>
           </div>
-          <div className="graph-visibility-actions" aria-label="Node visibility controls">
-            <span className="graph-visibility-count">{visibleGraph.nodes.length} visible</span>
-            <span className="graph-visibility-count">{hiddenNodes.length} hidden</span>
-            <button
-              type="button"
-              className="graph-restore-button"
-              onClick={() => setHiddenNodeIds([])}
-              disabled={hiddenNodes.length === 0}
-            >
-              Show All
-            </button>
-          </div>
           <div className="graph-help">
             <button
               type="button"
@@ -919,20 +889,6 @@ function GraphTab({ graph }: GraphTabProps) {
 
       <div className={`graph-layout ${visibleSidebarNode ? 'sidebar-open' : ''}`}>
         <div className="graph-stage star-map" aria-label="Recovered people graph visualization">
-          {hiddenNodes.length > 0 ? (
-            <div className="graph-hidden-list" aria-label="Hidden nodes">
-              {hiddenNodes.map((node) => (
-                <button
-                  key={node.id}
-                  type="button"
-                  className="graph-hidden-chip"
-                  onClick={() => showNode(node.id)}
-                >
-                  {node.person.fullName}
-                </button>
-              ))}
-            </div>
-          ) : null}
           <Canvas
             className="graph-canvas"
             camera={{ position: [0, 2.8, 8.4], fov: 52 }}
@@ -941,7 +897,7 @@ function GraphTab({ graph }: GraphTabProps) {
           >
             <GraphScene
               key={databaseSignature}
-              graph={visibleGraph}
+              graph={graph}
               focusedNodeId={focusedNodeId}
               highlightedNodeIds={highlightedNodeIds}
               onSelectNode={selectNode}
