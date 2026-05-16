@@ -182,13 +182,10 @@ export default function AdminView() {
 
   useEffect(() => {
     if (!selectedId) {
-      setConnections({ autoLinked: [], suggested: [] });
-      setConnectionsError(null);
       return;
     }
 
     let active = true;
-    setConnectionsError(null);
 
     fetchJsonOrThrow<{
       ok: boolean;
@@ -237,6 +234,8 @@ export default function AdminView() {
     window.history.pushState({}, "", url);
     setLoading(true);
     setSelectedId(id);
+    setConnections({ autoLinked: [], suggested: [] });
+    setConnectionsError(null);
     setError(null);
   };
 
@@ -247,6 +246,8 @@ export default function AdminView() {
     setLoading(true);
     setSelectedId(null);
     setDetail(null);
+    setConnections({ autoLinked: [], suggested: [] });
+    setConnectionsError(null);
     setError(null);
   };
 
@@ -529,9 +530,7 @@ export default function AdminView() {
           saving={saving}
           connections={connections}
           connectionsError={connectionsError}
-          onBack={backToList}
           onDecide={decide}
-          onDelete={deleteSubmission}
         />
       ) : null}
     </AdminLayout>
