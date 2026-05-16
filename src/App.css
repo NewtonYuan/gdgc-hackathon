@@ -288,6 +288,16 @@ h3 {
   border-top: 1px solid #2a2a2a;
 }
 
+.question-note {
+  margin: 0 0 0.7rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.question-note.warn {
+  color: #dfb463;
+}
+
 .question-list {
   display: flex;
   flex-direction: column;

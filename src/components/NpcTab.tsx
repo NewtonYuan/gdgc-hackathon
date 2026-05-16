@@ -1,4 +1,10 @@
-import type { AnsweredQuestion, DecisionOutcome, DecisionType } from '../lib/gameLoop'
+import {
+  MAX_QUESTIONS,
+  QUESTION_PENALTY,
+  type AnsweredQuestion,
+  type DecisionOutcome,
+  type DecisionType,
+} from '../lib/gameLoop'
 import type { Npc, Question } from '../lib/gameData'
 
 type NpcTabProps = {
@@ -58,15 +64,25 @@ function NpcTab({
       ) : (
         <>
           <section className="interrogation">
-            <h3>Interrogation // Fixed Question Set</h3>
+            <h3>
+              Interrogation // {answered.length}/{MAX_QUESTIONS} Questions Used
+            </h3>
+            <p className={`question-note ${answered.length >= MAX_QUESTIONS - 1 ? 'warn' : ''}`}>
+              {answered.length >= MAX_QUESTIONS
+                ? `Question limit reached — a -${QUESTION_PENALTY} stability penalty applies to this decision.`
+                : answered.length === MAX_QUESTIONS - 1
+                  ? `Asking one more question applies a -${QUESTION_PENALTY} stability penalty.`
+                  : `You may ask up to ${MAX_QUESTIONS} questions. The second costs ${QUESTION_PENALTY} stability.`}
+            </p>
             <div className="question-list">
               {questions.map((question) => {
                 const asked = answered.some((entry) => entry.questionId === question.id)
+                const limitReached = answered.length >= MAX_QUESTIONS
                 return (
                   <button
                     key={question.id}
                     type="button"
-                    disabled={asked}
+                    disabled={asked || limitReached}
                     onClick={() => onAsk(question.id)}
                   >
                     {question.text}

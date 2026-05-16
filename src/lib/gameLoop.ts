@@ -6,6 +6,8 @@ import { fetchRecords } from './sqlite'
 export const STABILITY_STEP = 20
 export const MAX_STABILITY = 100
 export const STARTING_LIVES = 3
+export const MAX_QUESTIONS = 2
+export const QUESTION_PENALTY = 10
 
 export type DecisionType = 'ACCEPT' | 'DECLINE'
 export type GamePhase = 'playing' | 'won' | 'lost'
@@ -116,6 +118,9 @@ export function gameReducer(state: GameState | null, action: GameAction): GameSt
 
   switch (action.type) {
     case 'ASK_QUESTION': {
+      if (state.answered.length >= MAX_QUESTIONS) {
+        return state
+      }
       if (state.answered.some((entry) => entry.questionId === action.questionId)) {
         return state
       }
@@ -140,11 +145,10 @@ export function gameReducer(state: GameState | null, action: GameAction): GameSt
       const correct = (action.decision === 'ACCEPT') === npc.isLegitimate
       const database = action.decision === 'ACCEPT' ? ingestClaim(state.database, npc) : state.database
 
+      const penalty = state.answered.length >= MAX_QUESTIONS ? QUESTION_PENALTY : 0
       const stability = correct
-        ? Math.min(MAX_STABILITY, state.stability + STABILITY_STEP)
-        : state.stability < STABILITY_STEP
-          ? 0
-          : state.stability - STABILITY_STEP
+        ? Math.min(MAX_STABILITY, state.stability + STABILITY_STEP - penalty)
+        : Math.max(0, state.stability - STABILITY_STEP - penalty)
       const lives = correct ? state.lives : state.lives - 1
 
       const phase: GamePhase = lives <= 0 ? 'lost' : stability >= MAX_STABILITY ? 'won' : 'playing'
@@ -161,7 +165,7 @@ export function gameReducer(state: GameState | null, action: GameAction): GameSt
           npcName: npc.name,
           decision: action.decision,
           correct,
-          message: outcomeMessage(npc, action.decision, correct),
+          message: outcomeMessage(npc, action.decision, correct, penalty),
         },
       }
     }
@@ -181,15 +185,17 @@ function advance(state: GameState): GameState {
   return { ...state, npcIndex: nextIndex, answered: [], outcome: null }
 }
 
-function outcomeMessage(npc: Npc, decision: DecisionType, correct: boolean): string {
-  if (decision === 'ACCEPT') {
-    return correct
-      ? `${npc.name} checks out. Record written as trusted; their testimony seeds the database.`
-      : `${npc.name} was a fraud. Their lie is now trusted in the records — society fractures.`
-  }
-  return correct
-    ? `${npc.name} was lying. Denied entry; no record added.`
-    : `${npc.name} was telling the truth. A genuine citizen turned away — society fractures.`
+function outcomeMessage(npc: Npc, decision: DecisionType, correct: boolean, penalty: number): string {
+  const base =
+    decision === 'ACCEPT'
+      ? correct
+        ? `${npc.name} checks out. Record written as trusted; their testimony seeds the database.`
+        : `${npc.name} was a fraud. Their lie is now trusted in the records — society fractures.`
+      : correct
+        ? `${npc.name} was lying. Denied entry; no record added.`
+        : `${npc.name} was telling the truth. A genuine citizen turned away — society fractures.`
+
+  return penalty > 0 ? `${base} (-${penalty} stability — two questions used.)` : base
 }
 
 type UseGameLoop = {
