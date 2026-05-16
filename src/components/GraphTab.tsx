@@ -275,19 +275,21 @@ function GraphEdge({ edge, points, isConnectedToFocus, focusMode }: GraphEdgePro
 
 type GraphSceneProps = {
   graph: GraphPayload
+  layoutNodes: GraphNodeData[]
   focusedNodeId: string | null
   highlightedNodeIds: Set<string> | null
   onSelectNode: (node: GraphNodeData) => void
 }
 
-function GraphScene({ graph, focusedNodeId, highlightedNodeIds, onSelectNode }: GraphSceneProps) {
+function GraphScene({ graph, layoutNodes, focusedNodeId, highlightedNodeIds, onSelectNode }: GraphSceneProps) {
   const { nodes, edges } = graph
   const focusMode = Boolean(focusedNodeId && highlightedNodeIds)
-  const positionedNodes = useMemo(() => buildNodePositions(nodes), [nodes])
+  const positionedNodes = useMemo(() => buildNodePositions(layoutNodes), [layoutNodes])
   const positionById = useMemo(
     () => new Map(positionedNodes.map((node) => [node.id, node.position])),
     [positionedNodes],
   )
+  const visibleNodeIds = useMemo(() => new Set(nodes.map((node) => node.id)), [nodes])
 
   return (
     <>
@@ -317,7 +319,7 @@ function GraphScene({ graph, focusedNodeId, highlightedNodeIds, onSelectNode }: 
           )
         })}
 
-        {positionedNodes.map((node) => {
+        {positionedNodes.filter((node) => visibleNodeIds.has(node.id)).map((node) => {
           const isHighlighted = highlightedNodeIds?.has(node.id) ?? false
 
           return (
@@ -363,8 +365,47 @@ type CloseButtonProps = {
   onClick: () => void
 }
 
+type FilterState = {
+  statuses: GraphNodeData['statusBucket'][]
+  trustMin: number
+  trustMax: number
+  cities: string[]
+  occupationTypes: string[]
+  ageMin: number
+  ageMax: number
+  includeMissingAge: boolean
+  employers: string[]
+  hasConnections: boolean
+}
+
+type SearchMatch = {
+  field: string
+  value: string
+}
+
+type SavedGraphView = {
+  name: string
+  search: string
+  filters: FilterState
+}
+
 const FOCUSABLE_SELECTOR =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+
+const DEFAULT_FILTERS: FilterState = {
+  statuses: [],
+  trustMin: 0,
+  trustMax: 100,
+  cities: [],
+  occupationTypes: [],
+  ageMin: 0,
+  ageMax: 100,
+  includeMissingAge: true,
+  employers: [],
+  hasConnections: false,
+}
+
+const SAVED_GRAPH_VIEWS_KEY = 'records-graph-saved-views'
 
 function CloseButton({ ariaLabel, className = '', onClick }: CloseButtonProps) {
   return (
@@ -379,6 +420,140 @@ function CloseButton({ ariaLabel, className = '', onClick }: CloseButtonProps) {
       </svg>
     </button>
   )
+}
+
+function normalizeSearchValue(value: string | number | null | undefined) {
+  return String(value ?? '').trim().toLowerCase()
+}
+
+function getSearchFields(node: GraphNodeData): SearchMatch[] {
+  const fullAddress = [node.person.street, node.person.city, node.person.country].filter(Boolean).join(', ')
+
+  return [
+    { field: 'First name', value: node.person.firstName },
+    { field: 'Last name', value: node.person.lastName },
+    { field: 'Name', value: node.person.fullName },
+    { field: 'Record ID', value: node.person.id },
+    { field: 'Street', value: node.person.street },
+    { field: 'City', value: node.person.city },
+    { field: 'Address', value: fullAddress },
+    { field: 'Employer', value: node.person.employment?.employer ?? '' },
+    { field: 'Job title', value: node.person.employment?.jobTitle ?? '' },
+    { field: 'Card ID', value: node.person.cardId },
+  ]
+}
+
+function getSearchMatch(node: GraphNodeData, searchQuery: string): SearchMatch | null {
+  const query = normalizeSearchValue(searchQuery)
+
+  if (!query) {
+    return null
+  }
+
+  return getSearchFields(node).find((item) => normalizeSearchValue(item.value).includes(query)) ?? null
+}
+
+function nodeMatchesSearch(node: GraphNodeData, searchQuery: string) {
+  return !normalizeSearchValue(searchQuery) || Boolean(getSearchMatch(node, searchQuery))
+}
+
+function nodePassesFilters(node: GraphNodeData, filters: FilterState, connectionCounts: Map<string, number>) {
+  const age = node.person.age
+  const statusPasses = filters.statuses.length === 0 || filters.statuses.includes(node.statusBucket)
+  const cityPasses = filters.cities.length === 0 || filters.cities.includes(node.person.city)
+  const occupationPasses =
+    filters.occupationTypes.length === 0 || filters.occupationTypes.includes(node.person.occupationType)
+  const employer = node.person.employment?.employer ?? ''
+  const employerPasses = filters.employers.length === 0 || filters.employers.includes(employer)
+  const agePasses =
+    age == null ? filters.includeMissingAge : age >= filters.ageMin && age <= filters.ageMax
+
+  return (
+    statusPasses &&
+    node.person.trustScore >= filters.trustMin &&
+    node.person.trustScore <= filters.trustMax &&
+    cityPasses &&
+    occupationPasses &&
+    agePasses &&
+    employerPasses &&
+    (!filters.hasConnections || (connectionCounts.get(node.id) ?? 0) > 0)
+  )
+}
+
+function applyFilters(
+  people: GraphNodeData[],
+  filters: FilterState,
+  searchQuery: string,
+  connectionCounts: Map<string, number>,
+) {
+  return people.filter((node) => nodePassesFilters(node, filters, connectionCounts) && nodeMatchesSearch(node, searchQuery))
+}
+
+function parseListParam(params: URLSearchParams, key: string) {
+  return (params.get(key) ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+}
+
+function readFiltersFromUrl(): { filters: FilterState; search: string } {
+  const params = new URLSearchParams(window.location.search)
+
+  return {
+    search: params.get('search') ?? '',
+    filters: {
+      statuses: parseListParam(params, 'status') as GraphNodeData['statusBucket'][],
+      trustMin: Number(params.get('trustMin') ?? DEFAULT_FILTERS.trustMin),
+      trustMax: Number(params.get('trustMax') ?? DEFAULT_FILTERS.trustMax),
+      cities: parseListParam(params, 'city'),
+      occupationTypes: parseListParam(params, 'occupation'),
+      ageMin: Number(params.get('ageMin') ?? DEFAULT_FILTERS.ageMin),
+      ageMax: Number(params.get('ageMax') ?? DEFAULT_FILTERS.ageMax),
+      includeMissingAge: params.get('includeMissingAge') !== 'false',
+      employers: parseListParam(params, 'employer'),
+      hasConnections: params.get('hasConnections') === 'true',
+    },
+  }
+}
+
+function writeFiltersToUrl(filters: FilterState, search: string) {
+  const params = new URLSearchParams()
+
+  if (search.trim()) params.set('search', search.trim())
+  if (filters.statuses.length > 0) params.set('status', filters.statuses.join(','))
+  if (filters.trustMin !== 0) params.set('trustMin', String(filters.trustMin))
+  if (filters.trustMax !== 100) params.set('trustMax', String(filters.trustMax))
+  if (filters.cities.length > 0) params.set('city', filters.cities.join(','))
+  if (filters.occupationTypes.length > 0) params.set('occupation', filters.occupationTypes.join(','))
+  if (filters.ageMin !== 0) params.set('ageMin', String(filters.ageMin))
+  if (filters.ageMax !== 100) params.set('ageMax', String(filters.ageMax))
+  if (!filters.includeMissingAge) params.set('includeMissingAge', 'false')
+  if (filters.employers.length > 0) params.set('employer', filters.employers.join(','))
+  if (filters.hasConnections) params.set('hasConnections', 'true')
+
+  const query = params.toString()
+  window.history.replaceState({}, '', `${window.location.pathname}${query ? `?${query}` : ''}`)
+}
+
+function readSavedViews() {
+  try {
+    return JSON.parse(localStorage.getItem(SAVED_GRAPH_VIEWS_KEY) ?? '[]') as SavedGraphView[]
+  } catch {
+    return []
+  }
+}
+
+function buildHistogram(values: number[], min: number, max: number, bucketCount = 10) {
+  const buckets = Array.from({ length: bucketCount }, () => 0)
+  const span = max - min || 1
+
+  for (const value of values) {
+    const bucketIndex = Math.min(bucketCount - 1, Math.max(0, Math.floor(((value - min) / span) * bucketCount)))
+    buckets[bucketIndex] += 1
+  }
+
+  const peak = Math.max(...buckets, 1)
+  return buckets.map((count) => (count / peak) * 100)
 }
 
 function formatValue(value: string | number | null | undefined) {
@@ -748,13 +923,26 @@ function ProfileModal({ graph, node, onClose, onSelectNode }: ProfileModalProps)
 }
 
 function GraphTab({ graph }: GraphTabProps) {
+  const initialUrlState = useMemo(() => readFiltersFromUrl(), [])
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null)
   const [sidebarNode, setSidebarNode] = useState<GraphNodeData | null>(null)
   const [isSidebarClosing, setIsSidebarClosing] = useState(false)
   const [isHelpOpen, setIsHelpOpen] = useState(false)
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
+  const [rawSearchQuery, setRawSearchQuery] = useState(initialUrlState.search)
+  const [searchQuery, setSearchQuery] = useState(initialUrlState.search)
+  const [filters, setFilters] = useState<FilterState>(initialUrlState.filters)
+  const [isFilterOpen, setIsFilterOpen] = useState(false)
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [activeSearchIndex, setActiveSearchIndex] = useState(0)
+  const [cityFilterSearch, setCityFilterSearch] = useState('')
+  const [employerFilterSearch, setEmployerFilterSearch] = useState('')
+  const [savedViews, setSavedViews] = useState<SavedGraphView[]>(() => readSavedViews())
   const viewProfileButtonRef = useRef<HTMLButtonElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const sidebarExitTimeoutRef = useRef<number | null>(null)
+  const filterButtonRef = useRef<HTMLButtonElement>(null)
+  const filterPopoverRef = useRef<HTMLDivElement>(null)
   const databaseSignature = useMemo(
     () =>
       `${graph.nodes.map((node) => `${node.id}:${node.person.verificationStatus}:${node.person.trustScore}`).join('|')}::${graph.edges.map((edge) => `${edge.source}:${edge.target}:${edge.strength}`).join('|')}`,
@@ -774,9 +962,53 @@ function GraphTab({ graph }: GraphTabProps) {
 
     return adjacency
   }, [graph])
+  const connectionCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+
+    for (const node of graph.nodes) {
+      counts.set(node.id, 0)
+    }
+
+    for (const edge of graph.edges) {
+      counts.set(edge.source, (counts.get(edge.source) ?? 0) + 1)
+      counts.set(edge.target, (counts.get(edge.target) ?? 0) + 1)
+    }
+
+    return counts
+  }, [graph])
+  const filterOptions = useMemo(() => {
+    const cities = [...new Set(graph.nodes.map((node) => node.person.city).filter(Boolean))].sort()
+    const occupationTypes = [...new Set(graph.nodes.map((node) => node.person.occupationType).filter(Boolean))].sort()
+    const employers = [
+      ...new Set(graph.nodes.map((node) => node.person.employment?.employer ?? '').filter(Boolean)),
+    ].sort()
+
+    return { cities, occupationTypes, employers }
+  }, [graph.nodes])
+  const filteredNodes = useMemo(
+    () => applyFilters(graph.nodes, filters, searchQuery, connectionCounts),
+    [connectionCounts, filters, graph.nodes, searchQuery],
+  )
+  const filteredNodeIds = useMemo(() => new Set(filteredNodes.map((node) => node.id)), [filteredNodes])
+  const filteredGraph = useMemo(
+    () => ({
+      nodes: filteredNodes,
+      edges: graph.edges.filter((edge) => filteredNodeIds.has(edge.source) && filteredNodeIds.has(edge.target)),
+    }),
+    [filteredNodeIds, filteredNodes, graph.edges],
+  )
+  const searchMatchesAll = useMemo(
+    () => graph.nodes.filter((node) => nodeMatchesSearch(node, searchQuery)),
+    [graph.nodes, searchQuery],
+  )
+  const searchResults = useMemo(
+    () => filteredNodes.filter((node) => nodeMatchesSearch(node, searchQuery)).slice(0, 8),
+    [filteredNodes, searchQuery],
+  )
+  const hiddenSearchMatchesCount = Math.max(0, searchMatchesAll.length - searchResults.length)
   const statusCounts = useMemo(
     () =>
-      graph.nodes.reduce(
+      filteredNodes.reduce(
         (counts, node) => ({
           ...counts,
           [node.statusBucket]: counts[node.statusBucket] + 1,
@@ -787,10 +1019,85 @@ function GraphTab({ graph }: GraphTabProps) {
           'not-verified': 0,
         } satisfies Record<GraphNodeData['statusBucket'], number>,
       ),
+    [filteredNodes],
+  )
+  const activeFilterChips = useMemo(() => {
+    const chips: Array<{ key: string; label: string; clear: () => void }> = []
+
+    for (const status of filters.statuses) {
+      chips.push({
+        key: `status-${status}`,
+        label: `Status: ${statusLabel(status)}`,
+        clear: () => setFilters((current) => ({ ...current, statuses: current.statuses.filter((item) => item !== status) })),
+      })
+    }
+    if (filters.trustMin !== 0 || filters.trustMax !== 100) {
+      chips.push({
+        key: 'trust',
+        label: `Trust score: ${filters.trustMin}-${filters.trustMax}`,
+        clear: () => setFilters((current) => ({ ...current, trustMin: 0, trustMax: 100 })),
+      })
+    }
+    for (const city of filters.cities) {
+      chips.push({
+        key: `city-${city}`,
+        label: `City: ${city}`,
+        clear: () => setFilters((current) => ({ ...current, cities: current.cities.filter((item) => item !== city) })),
+      })
+    }
+    for (const occupationType of filters.occupationTypes) {
+      chips.push({
+        key: `occupation-${occupationType}`,
+        label: `Occupation: ${occupationType}`,
+        clear: () =>
+          setFilters((current) => ({
+            ...current,
+            occupationTypes: current.occupationTypes.filter((item) => item !== occupationType),
+          })),
+      })
+    }
+    if (filters.ageMin !== 0 || filters.ageMax !== 100) {
+      chips.push({
+        key: 'age',
+        label: `Age: ${filters.ageMin}-${filters.ageMax}`,
+        clear: () => setFilters((current) => ({ ...current, ageMin: 0, ageMax: 100 })),
+      })
+    }
+    if (!filters.includeMissingAge) {
+      chips.push({
+        key: 'missing-age',
+        label: 'Age: recorded only',
+        clear: () => setFilters((current) => ({ ...current, includeMissingAge: true })),
+      })
+    }
+    for (const employer of filters.employers) {
+      chips.push({
+        key: `employer-${employer}`,
+        label: `Employer: ${employer}`,
+        clear: () =>
+          setFilters((current) => ({ ...current, employers: current.employers.filter((item) => item !== employer) })),
+      })
+    }
+    if (filters.hasConnections) {
+      chips.push({
+        key: 'connections',
+        label: 'Has connections',
+        clear: () => setFilters((current) => ({ ...current, hasConnections: false })),
+      })
+    }
+
+    return chips
+  }, [filters])
+  const trustHistogram = useMemo(
+    () => buildHistogram(graph.nodes.map((node) => node.person.trustScore), 0, 100),
+    [graph.nodes],
+  )
+  const ageHistogram = useMemo(
+    () => buildHistogram(graph.nodes.map((node) => node.person.age).filter((age): age is number => age != null), 0, 100),
     [graph.nodes],
   )
 
-  const activeSelectedNode = selectedNode
+  const activeSelectedNode = selectedNode && filteredNodeIds.has(selectedNode.id) ? selectedNode : null
   const visibleSidebarNode = activeSelectedNode ?? sidebarNode
   const focusedNodeId = activeSelectedNode?.id ?? null
   const highlightedNodeIds = useMemo(() => {
@@ -809,6 +1116,73 @@ function GraphTab({ graph }: GraphTabProps) {
     }
   }, [])
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setSearchQuery(rawSearchQuery), 150)
+    return () => window.clearTimeout(timeoutId)
+  }, [rawSearchQuery])
+
+  useEffect(() => {
+    writeFiltersToUrl(filters, rawSearchQuery)
+  }, [filters, rawSearchQuery])
+
+  useEffect(() => {
+    if (selectedNode && !filteredNodeIds.has(selectedNode.id)) {
+      closeInspector(selectedNode)
+    }
+  }, [filteredNodeIds, selectedNode])
+
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null
+      const isTyping =
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable
+
+      if (event.key === '/' && !isTyping) {
+        event.preventDefault()
+        searchInputRef.current?.focus()
+        setIsSearchOpen(true)
+      }
+    }
+
+    window.addEventListener('keydown', handleShortcut)
+    return () => window.removeEventListener('keydown', handleShortcut)
+  }, [])
+
+  useEffect(() => {
+    if (!isFilterOpen) {
+      return
+    }
+
+    function handleDismiss(event: MouseEvent) {
+      const target = event.target as Node | null
+      if (
+        target &&
+        (filterPopoverRef.current?.contains(target) || filterButtonRef.current?.contains(target))
+      ) {
+        return
+      }
+
+      setIsFilterOpen(false)
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setIsFilterOpen(false)
+        filterButtonRef.current?.focus()
+      }
+    }
+
+    document.addEventListener('mousedown', handleDismiss)
+    document.addEventListener('keydown', handleEscape)
+
+    return () => {
+      document.removeEventListener('mousedown', handleDismiss)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [isFilterOpen])
+
   function selectNode(node: GraphNodeData) {
     if (selectedNode?.id === node.id) {
       return
@@ -822,6 +1196,52 @@ function GraphTab({ graph }: GraphTabProps) {
     setIsSidebarClosing(false)
     setSidebarNode(node)
     setSelectedNode(node)
+  }
+
+  function clearAllFilters() {
+    setFilters(DEFAULT_FILTERS)
+    setRawSearchQuery('')
+    setSearchQuery('')
+  }
+
+  function toggleFilterListValue(key: 'statuses' | 'cities' | 'occupationTypes' | 'employers', value: string) {
+    setFilters((current) => {
+      const currentValues = current[key] as string[]
+      const nextValues = currentValues.includes(value)
+        ? currentValues.filter((item) => item !== value)
+        : [...currentValues, value]
+
+      return { ...current, [key]: nextValues }
+    })
+  }
+
+  function selectSearchResult(node: GraphNodeData) {
+    selectNode(node)
+    setRawSearchQuery(node.person.fullName)
+    setSearchQuery(node.person.fullName)
+    setIsSearchOpen(false)
+  }
+
+  function saveCurrentView() {
+    const name = window.prompt('Name this graph view')
+    if (!name?.trim()) {
+      return
+    }
+
+    const nextViews = [...savedViews.filter((view) => view.name !== name.trim()), { name: name.trim(), search: rawSearchQuery, filters }]
+    setSavedViews(nextViews)
+    localStorage.setItem(SAVED_GRAPH_VIEWS_KEY, JSON.stringify(nextViews))
+  }
+
+  function loadSavedView(name: string) {
+    const view = savedViews.find((item) => item.name === name)
+    if (!view) {
+      return
+    }
+
+    setFilters(view.filters)
+    setRawSearchQuery(view.search)
+    setSearchQuery(view.search)
   }
 
   function closeInspector(nodeForExit?: GraphNodeData) {
@@ -887,8 +1307,383 @@ function GraphTab({ graph }: GraphTabProps) {
         </div>
       </div>
 
+      <div className="graph-filter-toolbar" aria-label="Graph search and filters">
+        <div className="graph-search-wrap">
+          <span className="graph-search-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z" />
+            </svg>
+          </span>
+          <input
+            ref={searchInputRef}
+            type="search"
+            className="graph-search-input"
+            aria-label="Search people"
+            aria-controls="graph-search-results"
+            aria-expanded={isSearchOpen}
+            placeholder="Search by name, ID, address, or employer..."
+            value={rawSearchQuery}
+            onChange={(event) => {
+              setRawSearchQuery(event.target.value)
+              setIsSearchOpen(true)
+              setActiveSearchIndex(0)
+            }}
+            onFocus={() => setIsSearchOpen(true)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault()
+                setRawSearchQuery('')
+                setSearchQuery('')
+                setIsSearchOpen(false)
+                event.currentTarget.blur()
+              } else if (event.key === 'ArrowDown') {
+                event.preventDefault()
+                setActiveSearchIndex((current) => Math.min(current + 1, Math.max(searchResults.length - 1, 0)))
+              } else if (event.key === 'ArrowUp') {
+                event.preventDefault()
+                setActiveSearchIndex((current) => Math.max(current - 1, 0))
+              } else if (event.key === 'Enter' && searchResults[activeSearchIndex]) {
+                event.preventDefault()
+                selectSearchResult(searchResults[activeSearchIndex])
+              }
+            }}
+          />
+          {rawSearchQuery ? (
+            <button
+              type="button"
+              className="graph-search-clear"
+              aria-label="Clear search"
+              onClick={() => {
+                setRawSearchQuery('')
+                setSearchQuery('')
+                searchInputRef.current?.focus()
+              }}
+            >
+              ×
+            </button>
+          ) : null}
+          {isSearchOpen && rawSearchQuery.trim() ? (
+            <div className="graph-search-results" id="graph-search-results" role="listbox">
+              {searchResults.length > 0 ? (
+                searchResults.map((node, index) => {
+                  const match = getSearchMatch(node, searchQuery)
+
+                  return (
+                    <button
+                      key={node.id}
+                      type="button"
+                      role="option"
+                      aria-selected={index === activeSearchIndex}
+                      className={`graph-search-result ${index === activeSearchIndex ? 'active' : ''}`}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => selectSearchResult(node)}
+                    >
+                      <span className="graph-search-avatar" aria-hidden="true">
+                        {node.shortLabel}
+                      </span>
+                      <span>
+                        <strong>{node.person.fullName}</strong>
+                        <small>{match ? `${match.field}: ${match.value}` : node.person.city}</small>
+                      </span>
+                      <i className={`graph-status-pill ${node.statusBucket}`}>{statusLabel(node.statusBucket)}</i>
+                    </button>
+                  )
+                })
+              ) : (
+                <p>No people match this search</p>
+              )}
+              {hiddenSearchMatchesCount > 0 ? (
+                <p className="graph-search-hidden-note">
+                  {hiddenSearchMatchesCount} more results hidden by filters{' '}
+                  <button type="button" onClick={() => setFilters(DEFAULT_FILTERS)}>
+                    Clear filters
+                  </button>
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="graph-filter-center">
+          <button
+            ref={filterButtonRef}
+            type="button"
+            className="graph-filter-button"
+            aria-expanded={isFilterOpen}
+            onClick={() => setIsFilterOpen((current) => !current)}
+          >
+            Filters
+          </button>
+          {savedViews.length > 0 ? (
+            <select
+              className="graph-saved-views"
+              aria-label="Saved graph views"
+              defaultValue=""
+              onChange={(event) => {
+                loadSavedView(event.target.value)
+                event.currentTarget.value = ''
+              }}
+            >
+              <option value="">Saved views</option>
+              {savedViews.map((view) => (
+                <option key={view.name} value={view.name}>
+                  {view.name}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          <button type="button" className="graph-save-view" onClick={saveCurrentView}>
+            Save this view
+          </button>
+          <div className="graph-filter-chips" aria-label="Active filters">
+            {activeFilterChips.map((chip) => (
+              <button key={chip.key} type="button" className="graph-filter-chip" onClick={chip.clear}>
+                {chip.label} ×
+              </button>
+            ))}
+            {activeFilterChips.length > 0 || rawSearchQuery ? (
+              <button type="button" className="graph-clear-all" onClick={clearAllFilters}>
+                Clear all
+              </button>
+            ) : null}
+          </div>
+
+          {isFilterOpen ? (
+            <div ref={filterPopoverRef} className="graph-filter-popover" role="dialog" aria-label="Graph filters">
+              <section>
+                <h3>Status</h3>
+                {(['verified', 'in-process', 'not-verified'] as GraphNodeData['statusBucket'][]).map((status) => (
+                  <label key={status}>
+                    <input
+                      type="checkbox"
+                      checked={filters.statuses.length === 0 || filters.statuses.includes(status)}
+                      onChange={() => {
+                        if (filters.statuses.length === 0) {
+                          setFilters((current) => ({
+                            ...current,
+                            statuses: (['verified', 'in-process', 'not-verified'] as GraphNodeData['statusBucket'][]).filter(
+                              (item) => item !== status,
+                            ),
+                          }))
+                        } else {
+                          toggleFilterListValue('statuses', status)
+                        }
+                      }}
+                    />
+                    {statusLabel(status)}
+                  </label>
+                ))}
+              </section>
+
+              <section>
+                <h3>Trust Score</h3>
+                <div className="graph-histogram" aria-hidden="true">
+                  {trustHistogram.map((height, index) => (
+                    <i key={index} style={{ height: `${height}%` }} />
+                  ))}
+                </div>
+                <div className="graph-range-row">
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={filters.trustMin}
+                    onChange={(event) =>
+                      setFilters((current) => ({
+                        ...current,
+                        trustMin: Math.min(Number(event.target.value), current.trustMax),
+                      }))
+                    }
+                  />
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={filters.trustMax}
+                    onChange={(event) =>
+                      setFilters((current) => ({
+                        ...current,
+                        trustMax: Math.max(Number(event.target.value), current.trustMin),
+                      }))
+                    }
+                  />
+                </div>
+                <div className="graph-number-pair">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={filters.trustMin}
+                    onChange={(event) => setFilters((current) => ({ ...current, trustMin: Number(event.target.value) }))}
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={filters.trustMax}
+                    onChange={(event) => setFilters((current) => ({ ...current, trustMax: Number(event.target.value) }))}
+                  />
+                </div>
+              </section>
+
+              <section>
+                <h3>District / City</h3>
+                {filterOptions.cities.length > 10 ? (
+                  <input
+                    type="search"
+                    className="graph-filter-search"
+                    placeholder="Search cities"
+                    value={cityFilterSearch}
+                    onChange={(event) => setCityFilterSearch(event.target.value)}
+                  />
+                ) : null}
+                <div className="graph-filter-list">
+                  {filterOptions.cities
+                    .filter((city) => normalizeSearchValue(city).includes(normalizeSearchValue(cityFilterSearch)))
+                    .map((city) => (
+                      <label key={city}>
+                        <input
+                          type="checkbox"
+                          checked={filters.cities.includes(city)}
+                          onChange={() => toggleFilterListValue('cities', city)}
+                        />
+                        {city}
+                      </label>
+                    ))}
+                </div>
+              </section>
+
+              <section>
+                <h3>Occupation Type</h3>
+                <div className="graph-filter-list compact">
+                  {filterOptions.occupationTypes.map((occupationType) => (
+                    <label key={occupationType}>
+                      <input
+                        type="checkbox"
+                        checked={filters.occupationTypes.includes(occupationType)}
+                        onChange={() => toggleFilterListValue('occupationTypes', occupationType)}
+                      />
+                      {occupationType}
+                    </label>
+                  ))}
+                </div>
+              </section>
+
+              <section>
+                <h3>Age Range</h3>
+                <div className="graph-histogram" aria-hidden="true">
+                  {ageHistogram.map((height, index) => (
+                    <i key={index} style={{ height: `${height}%` }} />
+                  ))}
+                </div>
+                <div className="graph-range-row">
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={filters.ageMin}
+                    onChange={(event) =>
+                      setFilters((current) => ({
+                        ...current,
+                        ageMin: Math.min(Number(event.target.value), current.ageMax),
+                      }))
+                    }
+                  />
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={filters.ageMax}
+                    onChange={(event) =>
+                      setFilters((current) => ({
+                        ...current,
+                        ageMax: Math.max(Number(event.target.value), current.ageMin),
+                      }))
+                    }
+                  />
+                </div>
+                <div className="graph-number-pair">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={filters.ageMin}
+                    onChange={(event) => setFilters((current) => ({ ...current, ageMin: Number(event.target.value) }))}
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={filters.ageMax}
+                    onChange={(event) => setFilters((current) => ({ ...current, ageMax: Number(event.target.value) }))}
+                  />
+                </div>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={filters.includeMissingAge}
+                    onChange={(event) => setFilters((current) => ({ ...current, includeMissingAge: event.target.checked }))}
+                  />
+                  Include people with no age recorded
+                </label>
+              </section>
+
+              <section>
+                <h3>Employer</h3>
+                {filterOptions.employers.length > 10 ? (
+                  <input
+                    type="search"
+                    className="graph-filter-search"
+                    placeholder="Search employers"
+                    value={employerFilterSearch}
+                    onChange={(event) => setEmployerFilterSearch(event.target.value)}
+                  />
+                ) : null}
+                <div className="graph-filter-list">
+                  {filterOptions.employers
+                    .filter((employer) => normalizeSearchValue(employer).includes(normalizeSearchValue(employerFilterSearch)))
+                    .map((employer) => (
+                      <label key={employer}>
+                        <input
+                          type="checkbox"
+                          checked={filters.employers.includes(employer)}
+                          onChange={() => toggleFilterListValue('employers', employer)}
+                        />
+                        {employer}
+                      </label>
+                    ))}
+                </div>
+              </section>
+
+              <section>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={filters.hasConnections}
+                    onChange={(event) => setFilters((current) => ({ ...current, hasConnections: event.target.checked }))}
+                  />
+                  Only show people with at least one connection
+                </label>
+              </section>
+            </div>
+          ) : null}
+        </div>
+
+        <p className="graph-result-count" aria-live="polite">
+          Showing {filteredNodes.length} of {graph.nodes.length} people
+        </p>
+      </div>
+
       <div className={`graph-layout ${visibleSidebarNode ? 'sidebar-open' : ''}`}>
         <div className="graph-stage star-map" aria-label="Recovered people graph visualization">
+          {filteredNodes.length === 0 ? (
+            <div className="graph-empty-state">
+              <p>No people match the current filters</p>
+              <button type="button" onClick={clearAllFilters}>
+                Clear all filters
+              </button>
+            </div>
+          ) : null}
           <Canvas
             className="graph-canvas"
             camera={{ position: [0, 2.8, 8.4], fov: 52 }}
@@ -897,7 +1692,8 @@ function GraphTab({ graph }: GraphTabProps) {
           >
             <GraphScene
               key={databaseSignature}
-              graph={graph}
+              graph={filteredGraph}
+              layoutNodes={graph.nodes}
               focusedNodeId={focusedNodeId}
               highlightedNodeIds={highlightedNodeIds}
               onSelectNode={selectNode}
