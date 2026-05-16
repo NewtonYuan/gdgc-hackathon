@@ -1,13 +1,14 @@
 import './App.css'
-import { DesktopRealtimeView, PhoneRealtimeView } from './realtime/RealtimeViews'
+import { PhoneRealtimeView } from './realtime/RealtimeViews'
 import UploadView from './realtime/UploadView'
 import AdminView from './realtime/AdminView'
+import DesktopAdminView from './realtime/DesktopAdminView'
 
 function App() {
   const path = window.location.pathname.toLowerCase()
 
   if (path === '/desktop') {
-    return <DesktopRealtimeView />
+    return <DesktopAdminView />
   }
 
   if (path === '/phone') {
@@ -36,9 +37,6 @@ function LandingView() {
         </button>
         <button type="button" className="start-button" onClick={() => window.location.assign('/admin')}>
           ADMIN VIEW
-        </button>
-        <button type="button" className="start-button" onClick={() => window.location.assign('/desktop')}>
-          DESKTOP VIEW
         </button>
       </div>
     </main>

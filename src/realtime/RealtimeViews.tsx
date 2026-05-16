@@ -48,7 +48,11 @@ function socketUrl(role: 'desktop' | 'phone', deviceId: string): string {
   return `${protocol}://${window.location.host}/ws?role=${role}&deviceId=${encodeURIComponent(deviceId)}`
 }
 
-export function DesktopRealtimeView() {
+type DesktopRealtimeViewProps = {
+  embedded?: boolean
+}
+
+export function DesktopRealtimeView({ embedded = false }: DesktopRealtimeViewProps) {
   const [records, setRecords] = useState<RecordEntry[]>([])
   const [error, setError] = useState<string | null>(null)
   const [connection, setConnection] = useState('connecting')
@@ -124,8 +128,8 @@ export function DesktopRealtimeView() {
 
   const activeRecord = lastScan ? personMap.get(lastScan.personId) : null
 
-  return (
-    <main className="terminal-shell">
+  const content = (
+    <>
       <header className="topbar">
         <h1>Desktop Verifier</h1>
         <p className="tagline">Connection: {connection}</p>
@@ -161,8 +165,14 @@ export function DesktopRealtimeView() {
           ))}
         </div>
       </article>
-    </main>
+    </>
   )
+
+  if (embedded) {
+    return content
+  }
+
+  return <main className="terminal-shell">{content}</main>
 }
 
 export function PhoneRealtimeView() {
