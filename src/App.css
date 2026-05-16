@@ -392,15 +392,11 @@ th {
 }
 
 .graph-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 1rem;
-  align-items: stretch;
-  transition: grid-template-columns 220ms ease;
+  position: relative;
 }
 
 .graph-layout.sidebar-open {
-  grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-columns: none;
 }
 
 .graph-visibility-actions {
@@ -488,11 +484,25 @@ th {
 }
 
 .graph-inspector {
-  position: relative;
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  bottom: 0;
+  z-index: 4;
+  width: min(280px, calc(100% - 2rem));
+  overflow-y: auto;
   border: 2px solid #2a1010;
+  border-left-color: rgba(95, 216, 255, 0.22);
   background: #0d0808;
   padding: 1rem;
-  animation: graph-sidebar-enter 180ms ease;
+  box-shadow: -22px 0 42px rgba(0, 0, 0, 0.42);
+  animation: graph-sidebar-enter var(--motion-base) var(--ease-out);
+  will-change: transform, opacity;
+}
+
+.graph-inspector.closing {
+  pointer-events: none;
+  animation: graph-sidebar-exit var(--motion-base) var(--ease-in) forwards;
 }
 
 .graph-inspector.modal-open {
@@ -505,6 +515,10 @@ th {
   min-height: 2.25rem;
   margin-bottom: 0.2rem;
   padding-right: 2.5rem;
+}
+
+.graph-inspector-content {
+  animation: graph-sidebar-content-enter 120ms var(--ease-out);
 }
 
 .graph-icon-close {
@@ -613,6 +627,11 @@ th {
   place-items: center;
   padding: 1rem;
   background: rgba(0, 0, 0, 0.5);
+  animation: graph-backdrop-enter 200ms var(--ease-out);
+}
+
+.graph-modal-backdrop.closing {
+  animation: graph-backdrop-exit var(--motion-fast) var(--ease-in) forwards;
 }
 
 .graph-profile-modal {
@@ -626,6 +645,12 @@ th {
   border-radius: 8px;
   background: #0d0808;
   box-shadow: 0 28px 90px rgba(0, 0, 0, 0.68);
+  animation: graph-modal-enter 200ms var(--ease-out);
+  will-change: transform, opacity;
+}
+
+.graph-modal-backdrop.closing .graph-profile-modal {
+  animation: graph-modal-exit var(--motion-fast) var(--ease-in) forwards;
 }
 
 .graph-modal-header {
@@ -894,12 +919,78 @@ th {
 @keyframes graph-sidebar-enter {
   from {
     opacity: 0;
-    transform: translateX(18px);
+    transform: translateX(1.5rem);
   }
 
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+
+@keyframes graph-sidebar-exit {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(1.5rem);
+  }
+}
+
+@keyframes graph-sidebar-content-enter {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes graph-backdrop-enter {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes graph-backdrop-exit {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes graph-modal-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes graph-modal-exit {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(0.96);
   }
 }
 
@@ -1313,20 +1404,12 @@ button.deny {
     justify-content: flex-start;
   }
 
-  .graph-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .graph-layout.sidebar-open {
-    grid-template-columns: 1fr;
-  }
-
   .graph-visibility-actions {
     align-items: flex-start;
   }
 
-  .graph-modal-header {
-    grid-template-columns: minmax(0, 1fr) auto;
+  .graph-inspector {
+    width: min(280px, calc(100% - 2rem));
   }
 
   .graph-modal-grid {
@@ -2065,6 +2148,30 @@ button.deny {
   --info: #82a7ff;
   --focus: #f5d76e;
   --shadow: 0 18px 45px rgba(0, 0, 0, 0.34);
+  --motion-fast: 150ms;
+  --motion-base: 250ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 50ms;
+    --motion-base: 50ms;
+    --ease-out: linear;
+    --ease-in: linear;
+  }
+
+  .graph-inspector,
+  .graph-inspector.closing,
+  .graph-inspector-content,
+  .graph-modal-backdrop,
+  .graph-modal-backdrop.closing,
+  .graph-profile-modal,
+  .graph-modal-backdrop.closing .graph-profile-modal {
+    animation-duration: 50ms;
+    transform: none;
+  }
 }
 
 body {

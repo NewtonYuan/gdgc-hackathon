@@ -354,6 +354,9 @@ type ProfileModalProps = {
   onSelectNode: (node: GraphNodeData) => void
 }
 
+const SIDEBAR_EXIT_MS = 250
+const MODAL_EXIT_MS = 150
+
 type CloseButtonProps = {
   ariaLabel: string
   className?: string
@@ -429,6 +432,7 @@ function ProfileModal({ graph, node, onClose, onSelectNode }: ProfileModalProps)
   const [confirmAction, setConfirmAction] = useState<'deny' | null>(null)
   const [confirmNote, setConfirmNote] = useState('')
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(false)
+  const [isClosing, setIsClosing] = useState(false)
   const linkedNodes = useMemo(() => {
     return graph.edges
       .filter((edge) => edge.source === node.id || edge.target === node.id)
@@ -477,7 +481,7 @@ function ProfileModal({ graph, node, onClose, onSelectNode }: ProfileModalProps)
           setConfirmNote('')
           return
         }
-        onClose()
+        requestClose()
         return
       }
 
@@ -514,7 +518,16 @@ function ProfileModal({ graph, node, onClose, onSelectNode }: ProfileModalProps)
       document.removeEventListener('keydown', handleKeyDown)
       previousActiveElement?.focus()
     }
-  }, [onClose])
+  }, [])
+
+  function requestClose() {
+    if (isClosing) {
+      return
+    }
+
+    setIsClosing(true)
+    window.setTimeout(onClose, MODAL_EXIT_MS)
+  }
 
   function openConfirm(action: 'deny') {
     setConfirmAction(action)
@@ -536,7 +549,7 @@ function ProfileModal({ graph, node, onClose, onSelectNode }: ProfileModalProps)
   }
 
   return (
-    <div className="graph-modal-backdrop" onMouseDown={onClose}>
+    <div className={`graph-modal-backdrop ${isClosing ? 'closing' : ''}`} onMouseDown={requestClose}>
       <section
         ref={modalRef}
         className="graph-profile-modal"
@@ -550,7 +563,7 @@ function ProfileModal({ graph, node, onClose, onSelectNode }: ProfileModalProps)
             <h2 id="graph-profile-title">{node.person.fullName}</h2>
             <span className={`graph-status-pill ${node.statusBucket}`}>{statusLabel(node.statusBucket)}</span>
           </div>
-          <CloseButton ariaLabel="Close profile" className="graph-modal-close" onClick={onClose} />
+          <CloseButton ariaLabel="Close profile" className="graph-modal-close" onClick={requestClose} />
         </header>
 
         <div className="graph-modal-body">
@@ -736,10 +749,13 @@ function ProfileModal({ graph, node, onClose, onSelectNode }: ProfileModalProps)
 
 function GraphTab({ graph }: GraphTabProps) {
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null)
+  const [sidebarNode, setSidebarNode] = useState<GraphNodeData | null>(null)
+  const [isSidebarClosing, setIsSidebarClosing] = useState(false)
   const [hiddenNodeIds, setHiddenNodeIds] = useState<string[]>([])
   const [isHelpOpen, setIsHelpOpen] = useState(false)
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
   const viewProfileButtonRef = useRef<HTMLButtonElement>(null)
+  const sidebarExitTimeoutRef = useRef<number | null>(null)
   const visibleGraph = useMemo(() => {
     const hiddenSet = new Set(hiddenNodeIds)
 
@@ -789,6 +805,7 @@ function GraphTab({ graph }: GraphTabProps) {
 
   const activeSelectedNode =
     selectedNode && !hiddenNodeIds.includes(selectedNode.id) ? selectedNode : null
+  const visibleSidebarNode = activeSelectedNode ?? sidebarNode
   const focusedNodeId = activeSelectedNode?.id ?? null
   const highlightedNodeIds = useMemo(() => {
     if (!focusedNodeId) {
@@ -798,11 +815,26 @@ function GraphTab({ graph }: GraphTabProps) {
     return new Set([focusedNodeId, ...(adjacencyByNodeId.get(focusedNodeId) ?? [])])
   }, [adjacencyByNodeId, focusedNodeId])
 
+  useEffect(() => {
+    return () => {
+      if (sidebarExitTimeoutRef.current) {
+        window.clearTimeout(sidebarExitTimeoutRef.current)
+      }
+    }
+  }, [])
+
   function selectNode(node: GraphNodeData) {
     if (selectedNode?.id === node.id) {
       return
     }
 
+    if (sidebarExitTimeoutRef.current) {
+      window.clearTimeout(sidebarExitTimeoutRef.current)
+      sidebarExitTimeoutRef.current = null
+    }
+
+    setIsSidebarClosing(false)
+    setSidebarNode(node)
     setSelectedNode(node)
   }
 
@@ -810,9 +842,20 @@ function GraphTab({ graph }: GraphTabProps) {
     setHiddenNodeIds((current) => current.filter((id) => id !== nodeId))
   }
 
-  function closeInspector() {
+  function closeInspector(nodeForExit?: GraphNodeData) {
+    if (sidebarExitTimeoutRef.current) {
+      window.clearTimeout(sidebarExitTimeoutRef.current)
+    }
+
+    setSidebarNode(nodeForExit ?? activeSelectedNode ?? sidebarNode)
+    setIsSidebarClosing(true)
     setSelectedNode(null)
     setIsProfileModalOpen(false)
+    sidebarExitTimeoutRef.current = window.setTimeout(() => {
+      setSidebarNode(null)
+      setIsSidebarClosing(false)
+      sidebarExitTimeoutRef.current = null
+    }, SIDEBAR_EXIT_MS)
   }
 
   function closeProfileModal() {
@@ -874,7 +917,7 @@ function GraphTab({ graph }: GraphTabProps) {
         </div>
       </div>
 
-      <div className={`graph-layout ${activeSelectedNode ? 'sidebar-open' : ''}`}>
+      <div className={`graph-layout ${visibleSidebarNode ? 'sidebar-open' : ''}`}>
         <div className="graph-stage star-map" aria-label="Recovered people graph visualization">
           {hiddenNodes.length > 0 ? (
             <div className="graph-hidden-list" aria-label="Hidden nodes">
@@ -894,7 +937,7 @@ function GraphTab({ graph }: GraphTabProps) {
             className="graph-canvas"
             camera={{ position: [0, 2.8, 8.4], fov: 52 }}
             style={{ width: '100%', height: '100%' }}
-            onPointerMissed={closeInspector}
+            onPointerMissed={() => closeInspector()}
           >
             <GraphScene
               key={databaseSignature}
@@ -906,79 +949,86 @@ function GraphTab({ graph }: GraphTabProps) {
           </Canvas>
         </div>
 
-        {activeSelectedNode ? (
+        {visibleSidebarNode ? (
           <aside
-            className={`graph-inspector ${isProfileModalOpen ? 'modal-open' : ''}`}
+            className={`graph-inspector ${isProfileModalOpen ? 'modal-open' : ''} ${isSidebarClosing ? 'closing' : ''}`}
             aria-label="Selected person details"
           >
-            <div className="graph-inspector-head">
-              <p className={`graph-status-pill ${activeSelectedNode.statusBucket}`}>
-                {activeSelectedNode.person.verificationStatus.replace('-', ' ')}
-              </p>
-              <CloseButton ariaLabel="Close panel" className="graph-close-button" onClick={closeInspector} />
-            </div>
-            <p className="graph-person-name">{activeSelectedNode.person.fullName}</p>
-            <button
-              ref={viewProfileButtonRef}
-              type="button"
-              className="graph-more-button"
-              onClick={() => setIsProfileModalOpen(true)}
-            >
-              View Full Profile
-            </button>
+            <div className="graph-inspector-content" key={visibleSidebarNode.id}>
+              <div className="graph-inspector-head">
+                <p className={`graph-status-pill ${visibleSidebarNode.statusBucket}`}>
+                  {visibleSidebarNode.person.verificationStatus.replace('-', ' ')}
+                </p>
+                <CloseButton
+                  ariaLabel="Close panel"
+                  className="graph-close-button"
+                  onClick={() => closeInspector(visibleSidebarNode)}
+                />
+              </div>
+              <p className="graph-person-name">{visibleSidebarNode.person.fullName}</p>
+              <button
+                ref={viewProfileButtonRef}
+                type="button"
+                className="graph-more-button"
+                onClick={() => setIsProfileModalOpen(true)}
+                disabled={!activeSelectedNode}
+              >
+                View Full Profile
+              </button>
 
-            <dl className="graph-person-meta">
-              <div>
-                <dt>Age</dt>
-                <dd>{activeSelectedNode.person.age}</dd>
-              </div>
-              <div>
-                <dt>Gender</dt>
-                <dd>{activeSelectedNode.person.gender}</dd>
-              </div>
-              <div>
-                <dt>Status</dt>
-                <dd>{activeSelectedNode.person.verificationStatus}</dd>
-              </div>
-              <div>
-                <dt>Trust Score</dt>
-                <dd>{activeSelectedNode.person.trustScore}</dd>
-              </div>
-              <div>
-                <dt>Address</dt>
-                <dd>{`${activeSelectedNode.person.street}, ${activeSelectedNode.person.city}, ${activeSelectedNode.person.country}`}</dd>
-              </div>
-              <div>
-                <dt>Occupation Type</dt>
-                <dd>{activeSelectedNode.person.occupationType}</dd>
-              </div>
-              {activeSelectedNode.person.employment ? (
+              <dl className="graph-person-meta">
                 <div>
-                  <dt>Employment</dt>
-                  <dd>
-                    {activeSelectedNode.person.employment.jobTitle}
-                    <br />
-                    {activeSelectedNode.person.employment.employer}
-                  </dd>
+                  <dt>Age</dt>
+                  <dd>{visibleSidebarNode.person.age}</dd>
                 </div>
-              ) : null}
-              {activeSelectedNode.person.student ? (
                 <div>
-                  <dt>Student</dt>
-                  <dd>
-                    {activeSelectedNode.person.student.institution}
-                    <br />
-                    {activeSelectedNode.person.student.fieldOfStudy}
-                  </dd>
+                  <dt>Gender</dt>
+                  <dd>{visibleSidebarNode.person.gender}</dd>
                 </div>
-              ) : null}
-              {activeSelectedNode.person.retired ? (
                 <div>
-                  <dt>Former Occupation</dt>
-                  <dd>{activeSelectedNode.person.retired.formerOccupation ?? 'Unknown'}</dd>
+                  <dt>Status</dt>
+                  <dd>{visibleSidebarNode.person.verificationStatus}</dd>
                 </div>
-              ) : null}
-            </dl>
+                <div>
+                  <dt>Trust Score</dt>
+                  <dd>{visibleSidebarNode.person.trustScore}</dd>
+                </div>
+                <div>
+                  <dt>Address</dt>
+                  <dd>{`${visibleSidebarNode.person.street}, ${visibleSidebarNode.person.city}, ${visibleSidebarNode.person.country}`}</dd>
+                </div>
+                <div>
+                  <dt>Occupation Type</dt>
+                  <dd>{visibleSidebarNode.person.occupationType}</dd>
+                </div>
+                {visibleSidebarNode.person.employment ? (
+                  <div>
+                    <dt>Employment</dt>
+                    <dd>
+                      {visibleSidebarNode.person.employment.jobTitle}
+                      <br />
+                      {visibleSidebarNode.person.employment.employer}
+                    </dd>
+                  </div>
+                ) : null}
+                {visibleSidebarNode.person.student ? (
+                  <div>
+                    <dt>Student</dt>
+                    <dd>
+                      {visibleSidebarNode.person.student.institution}
+                      <br />
+                      {visibleSidebarNode.person.student.fieldOfStudy}
+                    </dd>
+                  </div>
+                ) : null}
+                {visibleSidebarNode.person.retired ? (
+                  <div>
+                    <dt>Former Occupation</dt>
+                    <dd>{visibleSidebarNode.person.retired.formerOccupation ?? 'Unknown'}</dd>
+                  </div>
+                ) : null}
+              </dl>
+            </div>
           </aside>
         ) : null}
       </div>
