@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 import DatabaseTab from './components/DatabaseTab'
+import GraphTab from './components/GraphTab'
 import NpcTab from './components/NpcTab'
 import { INITIAL_QUESTIONS, NPC_POOL } from './lib/gameData'
 import { STARTING_LIVES, getCurrentNpc, useGameLoop } from './lib/gameLoop'
@@ -27,7 +28,7 @@ function App() {
 
 function GameApp() {
   const [started, setStarted] = useState(false)
-  const [activeTab, setActiveTab] = useState<'database' | 'npc'>('database')
+  const [activeTab, setActiveTab] = useState<'database' | 'graph' | 'npc'>('database')
   const [booting, setBooting] = useState(true)
   const [bootProgress, setBootProgress] = useState(0)
   const { state, dispatch, loading, error } = useGameLoop()
@@ -198,10 +199,21 @@ function GameApp() {
                 >
                   Incoming NPC
                 </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'graph'}
+                  className={`tab-button ${activeTab === 'graph' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('graph')}
+                >
+                  Graph
+                </button>
               </div>
 
               {activeTab === 'database' ? (
                 <DatabaseTab database={state.database} />
+              ) : activeTab === 'graph' ? (
+                <GraphTab database={state.database} />
               ) : (
                 (() => {
                   const npc = getCurrentNpc(state)
