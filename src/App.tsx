@@ -1,78 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useState } from 'react'
 import './App.css'
-import DatabaseTab, { type RecordEntry } from './components/DatabaseTab'
+import DatabaseTab from './components/DatabaseTab'
 import NpcTab from './components/NpcTab'
-import { fetchRecords } from './lib/sqlite'
-
-const incomingClaim = {
-  name: 'Marcus Hale',
-  role: 'Power engineer',
-  district: 'Sector 2',
-  statement: "I'm Marcus Hale. Power engineer from Sector 2.",
-}
+import { INITIAL_QUESTIONS, NPC_POOL } from './lib/gameData'
+import { STARTING_LIVES, getCurrentNpc, useGameLoop } from './lib/gameLoop'
 
 function App() {
-  const [decision, setDecision] = useState<'VERIFY' | 'DENY' | null>(null)
   const [activeTab, setActiveTab] = useState<'database' | 'npc'>('database')
-  const [database, setDatabase] = useState<RecordEntry[]>([])
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let active = true
-
-    fetchRecords()
-      .then((rows) => {
-        if (!active) {
-          return
-        }
-        setDatabase(rows)
-      })
-      .catch((error: unknown) => {
-        if (!active) {
-          return
-        }
-        setLoadError(error instanceof Error ? error.message : 'Unknown SQLite error')
-      })
-      .finally(() => {
-        if (active) {
-          setLoading(false)
-        }
-      })
-
-    return () => {
-      active = false
-    }
-  }, [])
-
-  const analysis = useMemo(() => {
-    const match = database.find((entry) => entry.name === incomingClaim.name)
-
-    if (!match) {
-      return {
-        shouldVerify: false,
-        reason: 'No matching identity found in surviving records.',
-      }
-    }
-
-    const roleLooksValid = incomingClaim.role.toLowerCase().includes(match.role.toLowerCase())
-    const districtMatches = incomingClaim.district === match.district
-    const statusAllowsVerification = match.status !== 'Corrupted'
-
-    const shouldVerify = roleLooksValid && districtMatches && statusAllowsVerification
-
-    if (shouldVerify) {
-      return {
-        shouldVerify: true,
-        reason: 'Claim aligns with known role fragment and district.',
-      }
-    }
-
-    return {
-      shouldVerify: false,
-      reason: 'Fragments conflict or are too damaged to trust this claim.',
-    }
-  }, [database])
+  const { state, dispatch, loading, error } = useGameLoop()
 
   return (
     <main className="terminal-shell">
@@ -84,43 +19,152 @@ function App() {
         <p className="tagline">The database remembers fragments. You decide what survives.</p>
       </header>
 
-      <div className="tabs" role="tablist" aria-label="Terminal panels">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'database'}
-          className={`tab-button ${activeTab === 'database' ? 'active' : ''}`}
-          onClick={() => setActiveTab('database')}
-        >
-          Database
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'npc'}
-          className={`tab-button ${activeTab === 'npc' ? 'active' : ''}`}
-          onClick={() => setActiveTab('npc')}
-        >
-          Incoming NPC
-        </button>
-      </div>
-
-      {loading ? (
+      {error ? (
+        <article className="panel" role="alert">
+          <h2>Database Error</h2>
+          <p className="tagline">{error}</p>
+        </article>
+      ) : loading || !state ? (
         <article className="panel" role="status" aria-live="polite">
           <h2>Loading Database</h2>
           <p className="tagline">Initializing SQLite records...</p>
         </article>
-      ) : loadError ? (
-        <article className="panel" role="alert">
-          <h2>Database Error</h2>
-          <p className="tagline">{loadError}</p>
-        </article>
-      ) : activeTab === 'database' ? (
-        <DatabaseTab database={database} />
       ) : (
-        <NpcTab incomingClaim={incomingClaim} decision={decision} setDecision={setDecision} analysis={analysis} />
+        <>
+          <section className="hud" aria-label="Society status">
+            <div className="hud-meter">
+              <div className="hud-label">
+                <span>Society Stability</span>
+                <span>{state.stability}%</span>
+              </div>
+              <div className="stability-bar">
+                <div className="stability-fill" style={{ width: `${state.stability}%` }} />
+              </div>
+            </div>
+            <div className="hud-lives">
+              <span>Lives</span>
+              <div className="life-pips">
+                {Array.from({ length: STARTING_LIVES }).map((_, index) => (
+                  <span
+                    key={index}
+                    className={`life-pip ${index < state.lives ? '' : 'lost'}`}
+                    aria-hidden="true"
+                  />
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {state.phase !== 'playing' ? (
+            <EndScreen
+              won={state.phase === 'won'}
+              lostByLives={state.lives <= 0}
+              stability={state.stability}
+              correctCount={state.correctCount}
+              mistakeCount={state.mistakeCount}
+              lives={state.lives}
+            />
+          ) : (
+            <>
+              <div className="tabs" role="tablist" aria-label="Terminal panels">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'database'}
+                  className={`tab-button ${activeTab === 'database' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('database')}
+                >
+                  Database
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === 'npc'}
+                  className={`tab-button ${activeTab === 'npc' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('npc')}
+                >
+                  Incoming NPC
+                </button>
+              </div>
+
+              {activeTab === 'database' ? (
+                <DatabaseTab database={state.database} />
+              ) : (
+                (() => {
+                  const npc = getCurrentNpc(state)
+                  if (!npc) {
+                    return null
+                  }
+                  return (
+                    <NpcTab
+                      npc={npc}
+                      questions={INITIAL_QUESTIONS}
+                      answered={state.answered}
+                      outcome={state.outcome}
+                      personNumber={state.npcIndex + 1}
+                      totalPeople={NPC_POOL.length}
+                      onAsk={(questionId) => dispatch({ type: 'ASK_QUESTION', questionId })}
+                      onDecide={(decision) => dispatch({ type: 'DECIDE', decision })}
+                      onContinue={() => dispatch({ type: 'CONTINUE' })}
+                    />
+                  )
+                })()
+              )}
+            </>
+          )}
+        </>
       )}
     </main>
+  )
+}
+
+type EndScreenProps = {
+  won: boolean
+  lostByLives: boolean
+  stability: number
+  correctCount: number
+  mistakeCount: number
+  lives: number
+}
+
+function EndScreen({
+  won,
+  lostByLives,
+  stability,
+  correctCount,
+  mistakeCount,
+  lives,
+}: EndScreenProps) {
+  const summary = won
+    ? 'You held the line. The recovered records describe a society worth trusting again.'
+    : lostByLives
+      ? 'Too many wrong calls. Trust collapsed and the terminal went dark.'
+      : 'The records ran dry before order was restored. The session ends unresolved.'
+
+  return (
+    <article className={`panel endscreen ${won ? 'won' : 'lost'}`} role="status" aria-live="polite">
+      <h2>{won ? 'Society Stabilized' : 'Society Collapsed'}</h2>
+      <p className="tagline">{summary}</p>
+      <div className="endscreen-stats">
+        <p>
+          <span>Final stability</span> {stability}%
+        </p>
+        <p>
+          <span>Correct calls</span> {correctCount}
+        </p>
+        <p>
+          <span>Mistakes</span> {mistakeCount}
+        </p>
+        <p>
+          <span>Lives remaining</span> {lives}
+        </p>
+      </div>
+      <div className="actions">
+        <button type="button" onClick={() => window.location.reload()}>
+          Reinitialize Terminal
+        </button>
+      </div>
+    </article>
   )
 }
 
