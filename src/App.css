@@ -867,102 +867,37 @@ th {
 .graph-person-trust-row dd {
   display: inline-flex;
   align-items: center;
-  gap: 0.62rem;
+  gap: 0.48rem;
 }
 
 .graph-trust-light {
   position: relative;
   display: inline-block;
   flex: 0 0 auto;
-  width: 0.62rem;
-  height: 1.08rem;
-  margin-bottom: 0.02rem;
-}
-
-.graph-trust-light::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: 0.54rem;
-  height: 0.78rem;
-  border-radius: 48% 48% 40% 40%;
-  background:
-    radial-gradient(circle at 32% 25%, rgba(255, 255, 255, 0.78) 0 12%, transparent 13%),
-    radial-gradient(circle at 50% 46%, color-mix(in srgb, var(--trust-light-color) 84%, #ffffff 16%), var(--trust-light-color));
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--trust-light-color) 76%, #ffffff 24%),
-    0 0 0.42rem var(--trust-light-glow),
-    0 0 0.82rem var(--trust-light-glow);
-  transform: translateX(-50%);
-}
-
-.graph-trust-light::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: 0.02rem;
-  width: 0.34rem;
+  width: 0.28rem;
   height: 0.28rem;
-  border-radius: 0.05rem 0.05rem 0.12rem 0.12rem;
-  background:
-    linear-gradient(
-      to bottom,
-      color-mix(in srgb, var(--trust-light-color) 58%, #ffffff 22%) 0 18%,
-      color-mix(in srgb, var(--trust-light-color) 38%, #110606 62%) 19% 38%,
-      color-mix(in srgb, var(--trust-light-color) 58%, #ffffff 18%) 39% 57%,
-      color-mix(in srgb, var(--trust-light-color) 34%, #110606 66%) 58% 78%,
-      color-mix(in srgb, var(--trust-light-color) 46%, #110606 54%) 79% 100%
-    );
-  box-shadow: 0 0 0.28rem color-mix(in srgb, var(--trust-light-glow) 45%, transparent);
-  transform: translateX(-50%);
-}
-
-.graph-trust-filament {
-  position: absolute;
-  z-index: 1;
-  top: 0.45rem;
-  left: 50%;
-  width: 0.24rem;
-  height: 0.19rem;
-  border: 1.3px solid color-mix(in srgb, var(--trust-light-color) 28%, #fff3bd 72%);
-  border-top: 0;
-  border-radius: 0 0 0.2rem 0.2rem;
-  opacity: 0.92;
-  transform: translateX(-50%);
-}
-
-.graph-trust-filament::before,
-.graph-trust-filament::after {
-  content: '';
-  position: absolute;
-  bottom: -0.17rem;
-  width: 1.3px;
-  height: 0.2rem;
-  background: color-mix(in srgb, var(--trust-light-color) 30%, #fff3bd 70%);
-}
-
-.graph-trust-filament::before {
-  left: 0.045rem;
-}
-
-.graph-trust-filament::after {
-  right: 0.045rem;
+  border-radius: 50%;
+  background: var(--trust-light-color);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--trust-light-color) 72%, #ffffff 28%),
+    0 0 0.22rem color-mix(in srgb, var(--trust-light-color) 88%, #ffffff 12%),
+    0 0 0.56rem var(--trust-light-glow),
+    0 0 1.05rem var(--trust-light-glow);
 }
 
 .graph-trust-light.high {
   --trust-light-color: #49e86e;
-  --trust-light-glow: rgba(73, 232, 110, 0.75);
+  --trust-light-glow: rgba(73, 232, 110, 0.95);
 }
 
 .graph-trust-light.medium {
   --trust-light-color: #ffd24d;
-  --trust-light-glow: rgba(255, 210, 77, 0.78);
+  --trust-light-glow: rgba(255, 210, 77, 0.96);
 }
 
 .graph-trust-light.low {
   --trust-light-color: #ff4f4f;
-  --trust-light-glow: rgba(255, 79, 79, 0.78);
+  --trust-light-glow: rgba(255, 79, 79, 0.96);
 }
 
 .graph-modal-backdrop {

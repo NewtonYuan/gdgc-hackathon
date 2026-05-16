@@ -192,27 +192,46 @@ function calculateRealtimeTrustScores() {
     people.get(rightId)?.links.push({ otherId: leftId, relationship, strength })
   }
 
+  let maxConnectionCount = 1
+  let maxTotalStrength = 1
+  let maxRelationshipTypes = 1
+  for (const person of people.values()) {
+    const relationshipTypes = new Set(person.links.map((link) => link.relationship))
+    const totalStrength = person.links.reduce((sum, link) => sum + link.strength, 0)
+    maxConnectionCount = Math.max(maxConnectionCount, person.links.length)
+    maxTotalStrength = Math.max(maxTotalStrength, totalStrength)
+    maxRelationshipTypes = Math.max(maxRelationshipTypes, relationshipTypes.size)
+  }
+
   const scores = new Map()
   for (const person of people.values()) {
-    let informationScore = 4
-    if (person.name.trim()) informationScore += 8
-    if (person.phone.trim()) informationScore += 7
-    if (person.address.trim()) informationScore += 7
-    if (person.occupation.trim()) informationScore += 6
-    if (person.age != null) informationScore += 4
-    if (person.gender.trim()) informationScore += 3
-    if (person.hasOccupationDetail) informationScore += 5
-    informationScore += Math.min(person.documentCount, 4) * 5
-    informationScore += Math.min(person.cardPayloadFieldCount, 5)
-    informationScore = Math.min(informationScore, 60)
+    const personalInfoCompleteness = (
+      (person.name.trim() ? 0.12 : 0)
+      + (person.phone.trim() ? 0.1 : 0)
+      + (person.address.trim() ? 0.1 : 0)
+      + (person.occupation.trim() ? 0.08 : 0)
+      + (person.age != null ? 0.05 : 0)
+      + (person.gender.trim() ? 0.05 : 0)
+      + (person.hasOccupationDetail ? 0.12 : 0)
+      + Math.min(person.cardPayloadFieldCount / 5, 1) * 0.1
+    ) / 0.72
+    const documentCompleteness = Math.min(person.documentCount / 5, 1) ** 1.25
 
     const relationshipTypes = new Set(person.links.map((link) => link.relationship))
     const totalStrength = person.links.reduce((sum, link) => sum + link.strength, 0)
-    const connectionScore = Math.min(person.links.length * 3, 12)
-      + Math.min(totalStrength * 1.2, 24)
-      + Math.min(relationshipTypes.size * 2, 4)
+    const connectionStrength = (
+      Math.min((person.links.length / maxConnectionCount) ** 1.55, 1) * 0.32
+      + Math.min((totalStrength / maxTotalStrength) ** 1.65, 1) * 0.58
+      + Math.min((relationshipTypes.size / maxRelationshipTypes) ** 1.35, 1) * 0.1
+    )
 
-    scores.set(person.id, clampTrustScore(informationScore + connectionScore))
+    const weightedTrust = (
+      connectionStrength * 0.5
+      + documentCompleteness * 0.3
+      + personalInfoCompleteness * 0.2
+    )
+
+    scores.set(person.id, clampTrustScore((weightedTrust ** 1.35) * 96))
   }
 
   return scores

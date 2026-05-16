@@ -1744,7 +1744,6 @@ function GraphTab({ graph }: GraphTabProps) {
                 <div className="graph-person-trust-row">
                   <dt>Trust Score</dt>
                   <dd>
-                    <span>{visibleSidebarNode.person.trustScore}</span>
                     <span
                       className={`graph-trust-light ${trustScoreTone(visibleSidebarNode.person.trustScore)}`}
                       aria-label={`Trust score ${trustScoreTone(visibleSidebarNode.person.trustScore)}`}
@@ -1753,11 +1752,10 @@ function GraphTab({ graph }: GraphTabProps) {
                           ? 'High trust'
                           : visibleSidebarNode.person.trustScore >= 60
                             ? 'Medium trust'
-                            : 'Low trust'
+                          : 'Low trust'
                       }
-                    >
-                      <span className="graph-trust-filament" aria-hidden="true" />
-                    </span>
+                    />
+                    <span>{visibleSidebarNode.person.trustScore}</span>
                   </dd>
                 </div>
                 <div>
