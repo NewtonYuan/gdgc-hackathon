@@ -40,7 +40,6 @@ export default function AdminGraphView() {
   return (
     <AdminLayout active="graph">
       <section className="admin-page-shell">
-        <div className="admin-breadcrumbs">Dashboard &gt; Graph</div>
         <header className="admin-page-head">
           <h1>Graph</h1>
         </header>
@@ -59,3 +58,4 @@ export default function AdminGraphView() {
     </AdminLayout>
   )
 }
+
