@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 type AdminLayoutProps = {
-  active: 'submissions' | 'desktop'
+  active: 'submissions' | 'desktop' | 'graph'
   children: ReactNode
 }
 
@@ -30,6 +30,14 @@ export default function AdminLayout({ active, children }: AdminLayoutProps) {
             >
               <img src="/icons/timelapse.svg" alt="" aria-hidden="true" className="admin-nav-icon" />
               Desktop View
+            </button>
+            <button
+              type="button"
+              className={`admin-nav-item ${active === 'graph' ? 'active' : ''}`}
+              onClick={() => window.location.assign('/admin/graph')}
+            >
+              <img src="/icons/database.svg" alt="" aria-hidden="true" className="admin-nav-icon" />
+              Graph
             </button>
           </nav>
 
