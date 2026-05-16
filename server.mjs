@@ -194,6 +194,10 @@ function loadRecordsGraph() {
       c.verification_status,
       c.trust_score,
       c.created_at,
+      c.profile_source,
+      c.card_payload,
+      c.document_path,
+      c.decided_at,
       ed.job_title,
       ed.employer,
       ed.work_address,
@@ -209,11 +213,31 @@ function loadRecordsGraph() {
     ORDER BY c.name COLLATE NOCASE, c.card_id COLLATE NOCASE;
   `)
 
+  const documentResult = recordsDb.exec(`
+    SELECT citizen_id, type, document_number, issued_date, expiry_date, issuing_authority
+    FROM documents
+    ORDER BY citizen_id, type;
+  `)
+
   const edgeResult = recordsDb.exec(`
     SELECT citizen_a_id, citizen_b_id, relationship, strength
     FROM connections
     ORDER BY strength DESC, citizen_a_id, citizen_b_id;
   `)
+
+  const documentsByCitizen = new Map()
+  for (const row of documentResult[0]?.values ?? []) {
+    const citizenId = String(row[0])
+    const docs = documentsByCitizen.get(citizenId) ?? []
+    docs.push({
+      type: String(row[1] ?? ''),
+      documentNumber: String(row[2] ?? ''),
+      issuedDate: String(row[3] ?? ''),
+      expiryDate: row[4] == null ? null : String(row[4]),
+      issuingAuthority: String(row[5] ?? ''),
+    })
+    documentsByCitizen.set(citizenId, docs)
+  }
 
   const nodes = (citizenResult[0]?.values ?? []).map((row) => {
     const name = String(row[2] ?? '').trim() || String(row[1])
@@ -229,9 +253,11 @@ function loadRecordsGraph() {
       statusBucket: mapGraphStatus(verificationStatus),
       person: {
         id: String(row[0]),
+        cardId: String(row[1]),
         firstName,
         lastName,
         fullName: name,
+        phone: String(row[3] ?? ''),
         age: row[4] == null ? null : Number(row[4]),
         gender: row[5] == null ? '' : String(row[5]),
         photoUrl: '/images/profile-placeholder.png',
@@ -242,24 +268,29 @@ function loadRecordsGraph() {
         verificationStatus,
         trustScore: Number(row[9] ?? 0),
         createdAt: String(row[10] ?? ''),
-        employment: row[11]
+        profileSource: String(row[11] ?? ''),
+        cardPayload: row[12] == null ? null : String(row[12]),
+        documentPath: row[13] == null ? null : String(row[13]),
+        decidedAt: row[14] == null ? null : String(row[14]),
+        documents: documentsByCitizen.get(String(row[0])) ?? [],
+        employment: row[15]
           ? {
-              jobTitle: String(row[11]),
-              employer: String(row[12]),
-              workAddress: String(row[13]),
+              jobTitle: String(row[15]),
+              employer: String(row[16]),
+              workAddress: String(row[17]),
             }
           : null,
-        student: row[14]
+        student: row[18]
           ? {
-              institution: String(row[14]),
-              studentId: String(row[15]),
-              fieldOfStudy: String(row[16]),
-              yearOfStudy: Number(row[17]),
+              institution: String(row[18]),
+              studentId: String(row[19]),
+              fieldOfStudy: String(row[20]),
+              yearOfStudy: Number(row[21]),
             }
           : null,
-        retired: row[18]
+        retired: row[22]
           ? {
-              formerOccupation: String(row[18]),
+              formerOccupation: String(row[22]),
             }
           : null,
       },

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Billboard, Line, OrbitControls, Stars, Text } from '@react-three/drei'
 import * as THREE from 'three'
@@ -270,10 +270,312 @@ function GraphScene({ graph, onSelectNode }: GraphSceneProps) {
   )
 }
 
+type ProfileModalProps = {
+  graph: GraphPayload
+  node: GraphNodeData
+  onClose: () => void
+  onSelectNode: (node: GraphNodeData) => void
+}
+
+const FOCUSABLE_SELECTOR =
+  'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+
+function formatValue(value: string | number | null | undefined) {
+  if (value === null || value === undefined || value === '') {
+    return <span className="graph-muted-value">—</span>
+  }
+
+  return value
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) {
+    return <span className="graph-muted-value">—</span>
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toLocaleDateString()
+}
+
+function statusLabel(statusBucket: GraphNodeData['statusBucket']) {
+  if (statusBucket === 'in-process') {
+    return 'pending'
+  }
+
+  if (statusBucket === 'not-verified') {
+    return 'not verified'
+  }
+
+  return 'verified'
+}
+
+function getInitials(node: GraphNodeData) {
+  const first = node.person.firstName.at(0) ?? ''
+  const last = node.person.lastName.at(0) ?? ''
+  return `${first}${last}`.toUpperCase() || node.shortLabel
+}
+
+function DetailRow({ label, value }: { label: string; value: string | number | null | undefined }) {
+  return (
+    <div className="graph-modal-row">
+      <dt>{label}</dt>
+      <dd>{formatValue(value)}</dd>
+    </div>
+  )
+}
+
+function ProfileModal({ graph, node, onClose, onSelectNode }: ProfileModalProps) {
+  const modalRef = useRef<HTMLDivElement>(null)
+  const linkedNodes = useMemo(() => {
+    return graph.edges
+      .filter((edge) => edge.source === node.id || edge.target === node.id)
+      .map((edge) => {
+        const linkedId = edge.source === node.id ? edge.target : edge.source
+        const linkedNode = graph.nodes.find((candidate) => candidate.id === linkedId)
+        return linkedNode ? { node: linkedNode, edge } : null
+      })
+      .filter((item): item is { node: GraphNodeData; edge: GraphPayload['edges'][number] } => item !== null)
+  }, [graph.edges, graph.nodes, node.id])
+  const connectionCounts = linkedNodes.reduce(
+    (counts, item) => ({
+      ...counts,
+      [item.node.statusBucket]: counts[item.node.statusBucket] + 1,
+    }),
+    {
+      verified: 0,
+      'in-process': 0,
+      'not-verified': 0,
+    } satisfies Record<GraphNodeData['statusBucket'], number>,
+  )
+  const fullAddress = [node.person.street, node.person.city, node.person.country].filter(Boolean).join(', ')
+  const hasPhoto = Boolean(node.person.photoUrl)
+  const trustScore = Math.min(Math.max(node.person.trustScore, 0), 100)
+
+  useEffect(() => {
+    const previousActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const firstFocusable = modalRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
+    firstFocusable?.focus()
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onClose()
+        return
+      }
+
+      if (event.key !== 'Tab' || !modalRef.current) {
+        return
+      }
+
+      const focusableElements = Array.from(
+        modalRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+      ).filter((element) => !element.hasAttribute('disabled'))
+
+      if (focusableElements.length === 0) {
+        event.preventDefault()
+        return
+      }
+
+      const firstElement = focusableElements[0]
+      const lastElement = focusableElements[focusableElements.length - 1]
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault()
+        lastElement.focus()
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault()
+        firstElement.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      previousActiveElement?.focus()
+    }
+  }, [onClose])
+
+  return (
+    <div className="graph-modal-backdrop" onMouseDown={onClose}>
+      <section
+        ref={modalRef}
+        className="graph-profile-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="graph-profile-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header className="graph-modal-header">
+          <div className="graph-modal-photo" aria-hidden="true">
+            {hasPhoto ? <img src={node.person.photoUrl} alt="" /> : <span>{getInitials(node)}</span>}
+          </div>
+          <div>
+            <h2 id="graph-profile-title">{node.person.fullName}</h2>
+            <span className={`graph-status-pill ${node.statusBucket}`}>{statusLabel(node.statusBucket)}</span>
+          </div>
+          <button type="button" className="graph-modal-close" aria-label="Close full profile" onClick={onClose}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </header>
+
+        <div className="graph-modal-body">
+          <section className="graph-modal-section">
+            <h3>Identity</h3>
+            <dl className="graph-modal-grid">
+              <DetailRow label="Full name" value={node.person.fullName} />
+              <DetailRow label="Age" value={node.person.age} />
+              <DetailRow label="Gender" value={node.person.gender} />
+              <DetailRow label="Date of birth" value={null} />
+              <DetailRow label="Phone" value={node.person.phone} />
+              <DetailRow label="Card ID" value={node.person.cardId} />
+            </dl>
+          </section>
+
+          <section className="graph-modal-section">
+            <h3>Verification</h3>
+            <dl className="graph-modal-grid">
+              <DetailRow label="Status" value={node.person.verificationStatus} />
+              <div className="graph-modal-row graph-trust-row">
+                <dt>Trust score</dt>
+                <dd>
+                  <span>{trustScore} / 100</span>
+                  <i aria-hidden="true">
+                    <b style={{ width: `${trustScore}%` }} />
+                  </i>
+                </dd>
+              </div>
+              <div className="graph-modal-row">
+                <dt>Verification date</dt>
+                <dd>{formatDate(node.person.decidedAt)}</dd>
+              </div>
+              <DetailRow label="Verifier ID" value={null} />
+            </dl>
+          </section>
+
+          <section className="graph-modal-section">
+            <h3>Address</h3>
+            <dl className="graph-modal-grid">
+              <DetailRow label="Street" value={node.person.street} />
+              <DetailRow label="City" value={node.person.city} />
+              <DetailRow label="Country" value={node.person.country} />
+              <DetailRow label="Full address" value={fullAddress} />
+            </dl>
+          </section>
+
+          <section className="graph-modal-section">
+            <h3>Employment</h3>
+            <dl className="graph-modal-grid">
+              <DetailRow label="Occupation type" value={node.person.occupationType} />
+              <DetailRow label="Job title" value={node.person.employment?.jobTitle} />
+              <DetailRow label="Employer" value={node.person.employment?.employer} />
+              <DetailRow label="Work address" value={node.person.employment?.workAddress} />
+              <DetailRow label="Institution" value={node.person.student?.institution} />
+              <DetailRow label="Student ID" value={node.person.student?.studentId} />
+              <DetailRow label="Field of study" value={node.person.student?.fieldOfStudy} />
+              <DetailRow label="Year of study" value={node.person.student?.yearOfStudy} />
+              <DetailRow label="Former occupation" value={node.person.retired?.formerOccupation} />
+            </dl>
+          </section>
+
+          <section className="graph-modal-section">
+            <h3>Connections</h3>
+            <p className="graph-connection-summary">
+              {linkedNodes.length} linked people · {connectionCounts.verified} verified,{' '}
+              {connectionCounts['in-process']} pending, {connectionCounts['not-verified']} not verified
+            </p>
+            <div className="graph-connection-chips">
+              {linkedNodes.length > 0 ? (
+                linkedNodes.map((item) => (
+                  <button
+                    key={item.node.id}
+                    type="button"
+                    className={`graph-connection-chip ${item.node.statusBucket}`}
+                    onClick={() => onSelectNode(item.node)}
+                    title={item.edge.overlapSummary}
+                  >
+                    {item.node.person.fullName}
+                  </button>
+                ))
+              ) : (
+                <span className="graph-muted-value">—</span>
+              )}
+            </div>
+          </section>
+
+          <section className="graph-modal-section">
+            <h3>Documents</h3>
+            <dl className="graph-modal-grid">
+              {node.person.documents.length > 0 ? (
+                node.person.documents.map((document) => (
+                  <div className="graph-modal-row" key={`${document.type}-${document.documentNumber}`}>
+                    <dt>{document.type.replace(/_/g, ' ')}</dt>
+                    <dd>
+                      {document.documentNumber}
+                      <br />
+                      <span className="graph-document-meta">
+                        Issued {formatDate(document.issuedDate)} · Expires {formatDate(document.expiryDate)} ·{' '}
+                        {formatValue(document.issuingAuthority)}
+                      </span>
+                    </dd>
+                  </div>
+                ))
+              ) : (
+                <DetailRow label="Documents" value={null} />
+              )}
+            </dl>
+          </section>
+
+          <section className="graph-modal-section">
+            <h3>Record Metadata</h3>
+            <dl className="graph-modal-grid">
+              <DetailRow label="Record ID" value={node.person.id} />
+              <DetailRow label="Profile source" value={node.person.profileSource} />
+              <div className="graph-modal-row">
+                <dt>Created date</dt>
+                <dd>{formatDate(node.person.createdAt)}</dd>
+              </div>
+              <DetailRow label="Last updated" value={null} />
+              <DetailRow label="Uploaded document path" value={node.person.documentPath} />
+            </dl>
+          </section>
+        </div>
+
+        <footer className="graph-modal-footer">
+          <button type="button" className="graph-modal-secondary" onClick={onClose}>
+            Close
+          </button>
+          {node.statusBucket === 'in-process' ? (
+            <>
+              <button type="button" className="graph-modal-action approve">
+                Approve
+              </button>
+              <button type="button" className="graph-modal-action reject">
+                Reject
+              </button>
+            </>
+          ) : null}
+          <button type="button" className="graph-modal-action flag">
+            Flag
+          </button>
+        </footer>
+      </section>
+    </div>
+  )
+}
+
 function GraphTab({ graph }: GraphTabProps) {
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null)
   const [hiddenNodeIds, setHiddenNodeIds] = useState<string[]>([])
   const [isHelpOpen, setIsHelpOpen] = useState(false)
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
+  const viewProfileButtonRef = useRef<HTMLButtonElement>(null)
   const visibleGraph = useMemo(() => {
     const hiddenSet = new Set(hiddenNodeIds)
 
@@ -310,15 +612,26 @@ function GraphTab({ graph }: GraphTabProps) {
   const activeSelectedNode =
     selectedNode && !hiddenNodeIds.includes(selectedNode.id) ? selectedNode : null
 
-  function hideNode(nodeId: string) {
-    setHiddenNodeIds((current) => (current.includes(nodeId) ? current : [...current, nodeId]))
+  function selectNode(node: GraphNodeData) {
+    setSelectedNode(node)
   }
 
   function showNode(nodeId: string) {
     setHiddenNodeIds((current) => current.filter((id) => id !== nodeId))
   }
 
+  function closeInspector() {
+    setSelectedNode(null)
+    setIsProfileModalOpen(false)
+  }
+
+  function closeProfileModal() {
+    setIsProfileModalOpen(false)
+    window.setTimeout(() => viewProfileButtonRef.current?.focus(), 0)
+  }
+
   return (
+    <>
     <article className="panel" role="tabpanel" aria-label="Relationship graph panel">
       <div className="graph-header">
         <div className="graph-title-group">
@@ -391,18 +704,38 @@ function GraphTab({ graph }: GraphTabProps) {
             className="graph-canvas"
             camera={{ position: [0, 2.8, 8.4], fov: 52 }}
             style={{ width: '100%', height: '100%' }}
-            onPointerMissed={() => setSelectedNode(null)}
+            onPointerMissed={closeInspector}
           >
-            <GraphScene key={databaseSignature} graph={visibleGraph} onSelectNode={setSelectedNode} />
+            <GraphScene key={databaseSignature} graph={visibleGraph} onSelectNode={selectNode} />
           </Canvas>
         </div>
 
         {activeSelectedNode ? (
           <aside className="graph-inspector" aria-label="Selected person details">
-            <p className={`graph-status-pill ${activeSelectedNode.statusBucket}`}>
-              {activeSelectedNode.person.verificationStatus.replace('-', ' ')}
-            </p>
+            <div className="graph-inspector-head">
+              <p className={`graph-status-pill ${activeSelectedNode.statusBucket}`}>
+                {activeSelectedNode.person.verificationStatus.replace('-', ' ')}
+              </p>
+              <button
+                type="button"
+                className="graph-close-button"
+                aria-label="Close panel"
+                onClick={closeInspector}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
             <p className="graph-person-name">{activeSelectedNode.person.fullName}</p>
+            <button
+              ref={viewProfileButtonRef}
+              type="button"
+              className="graph-more-button"
+              onClick={() => setIsProfileModalOpen(true)}
+            >
+              View Full Profile
+            </button>
 
             <dl className="graph-person-meta">
               <div>
@@ -455,19 +788,20 @@ function GraphTab({ graph }: GraphTabProps) {
                   <dd>{activeSelectedNode.person.retired.formerOccupation ?? 'Unknown'}</dd>
                 </div>
               ) : null}
-              <div>
-                <dt>Visibility</dt>
-                <dd>
-                  <button type="button" className="graph-hide-button" onClick={() => hideNode(activeSelectedNode.id)}>
-                    Hide This Node
-                  </button>
-                </dd>
-              </div>
             </dl>
           </aside>
         ) : null}
       </div>
     </article>
+    {activeSelectedNode && isProfileModalOpen ? (
+      <ProfileModal
+        graph={graph}
+        node={activeSelectedNode}
+        onClose={closeProfileModal}
+        onSelectNode={selectNode}
+      />
+    ) : null}
+    </>
   )
 }
 

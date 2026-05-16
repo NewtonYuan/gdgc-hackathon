@@ -4,10 +4,12 @@ export type GraphStatusBucket = 'verified' | 'in-process' | 'not-verified'
 
 export type PersonObject = {
   id: string
+  cardId: string
   firstName: string
   lastName: string
   fullName: string
-  age: number
+  phone: string
+  age: number | null
   gender: string
   photoUrl: string
   street: string
@@ -17,6 +19,17 @@ export type PersonObject = {
   verificationStatus: VerificationStatus
   trustScore: number
   createdAt: string
+  decidedAt: string | null
+  profileSource: string
+  cardPayload: string | null
+  documentPath: string | null
+  documents: Array<{
+    type: string
+    documentNumber: string
+    issuedDate: string
+    expiryDate: string | null
+    issuingAuthority: string
+  }>
   employment: {
     jobTitle: string
     employer: string
