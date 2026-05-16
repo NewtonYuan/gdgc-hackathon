@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import AdminSubmissionOverview from './AdminSubmissionOverview'
+import AdminLayout from './AdminLayout'
 
 type SubmissionSummary = {
   id: string
@@ -160,105 +161,83 @@ export default function AdminView() {
     }
   }
 
+  const stats = {
+    total: rows.length,
+    pending: rows.filter((r) => !r.decision).length,
+    accepted: rows.filter((r) => r.decision === 'ACCEPTED').length,
+    declined: rows.filter((r) => r.decision === 'DECLINED').length,
+  }
+
   if (loading) {
     return (
-      <main className="terminal-shell">
+      <AdminLayout active="submissions" stats={stats}>
         <article className="panel">
           <h2>Loading Admin View...</h2>
         </article>
-      </main>
+      </AdminLayout>
     )
   }
 
   return (
-    <main className="admin-shell">
-      <div className="admin-layout">
-        <aside className="admin-sidebar panel">
-          <div className="admin-brand">
-            <strong>records.io</strong>
-          </div>
+    <AdminLayout active="submissions" stats={stats}>
+      <header className="topbar">
+        <h1>Admin View</h1>
+      </header>
 
-          <nav className="admin-nav" aria-label="Admin sections">
-            <button type="button" className="admin-nav-item">Dashboard</button>
-            <button type="button" className="admin-nav-item">Forms</button>
-            <button type="button" className="admin-nav-item active">Submissions</button>
-            <button type="button" className="admin-nav-item">Profile</button>
-            <button type="button" className="admin-nav-item">Account</button>
-          </nav>
+      {error && (
+        <article className="panel">
+          <p className="tagline">{error}</p>
+        </article>
+      )}
 
-          <div className="admin-stats">
-            <p><span>Total</span> {rows.length}</p>
-            <p><span>Pending</span> {rows.filter((r) => !r.decision).length}</p>
-            <p><span>Accepted</span> {rows.filter((r) => r.decision === 'ACCEPTED').length}</p>
-            <p><span>Declined</span> {rows.filter((r) => r.decision === 'DECLINED').length}</p>
-          </div>
-
-          <div className="actions">
-            <button type="button" onClick={() => window.location.assign('/')}>Back</button>
-          </div>
-        </aside>
-
-        <section className="admin-main">
-          <header className="topbar">
-            <h1>Admin View</h1>
-          </header>
-
-          {error && (
-            <article className="panel">
-              <p className="tagline">{error}</p>
-            </article>
-          )}
-
-          {!selectedId ? (
-            <article className="panel">
-              <h2>Applicant Database</h2>
-              <div className="admin-table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Phone</th>
-                      <th>Occupation</th>
-                      <th>cardID</th>
-                      <th>Status</th>
-                      <th>Action</th>
+      {!selectedId ? (
+        <article className="panel">
+          <h2>Applicant Database</h2>
+          <div className="admin-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Phone</th>
+                  <th>Occupation</th>
+                  <th>cardID</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={6}>No submissions yet.</td>
+                  </tr>
+                ) : (
+                  rows.map((row) => (
+                    <tr key={row.id}>
+                      <td>{row.name}</td>
+                      <td>{row.phone}</td>
+                      <td>{row.occupation}</td>
+                      <td>{row.cardId}</td>
+                      <td>{row.decision ?? 'PENDING'}</td>
+                      <td>
+                        <button type="button" className="verify" onClick={() => openVerify(row.id)}>
+                          Verify
+                        </button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {rows.length === 0 ? (
-                      <tr>
-                        <td colSpan={6}>No submissions yet.</td>
-                      </tr>
-                    ) : (
-                      rows.map((row) => (
-                        <tr key={row.id}>
-                          <td>{row.name}</td>
-                          <td>{row.phone}</td>
-                          <td>{row.occupation}</td>
-                          <td>{row.cardId}</td>
-                          <td>{row.decision ?? 'PENDING'}</td>
-                          <td>
-                            <button type="button" className="verify" onClick={() => openVerify(row.id)}>
-                              Verify
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </article>
-          ) : detail ? (
-            <AdminSubmissionOverview
-              detail={detail}
-              saving={saving}
-              onBack={backToList}
-              onDecide={decide}
-            />
-          ) : null}
-        </section>
-      </div>
-    </main>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </article>
+      ) : detail ? (
+        <AdminSubmissionOverview
+          detail={detail}
+          saving={saving}
+          onBack={backToList}
+          onDecide={decide}
+        />
+      ) : null}
+    </AdminLayout>
   )
 }
