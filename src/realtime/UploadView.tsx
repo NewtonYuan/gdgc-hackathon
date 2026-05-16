@@ -221,7 +221,7 @@ export default function UploadView() {
       return
     }
 
-    // NFC write succeeded — auto-save to the DB and animate the upload rings.
+    // NFC write succeeded; auto-save to the DB and animate the upload rings.
     setQueue((prev) => prev.map((q) => ({ ...q, progress: 0, done: false })))
     const ticker = window.setInterval(() => {
       setQueue((prev) =>
@@ -252,13 +252,9 @@ export default function UploadView() {
   return (
     <main className="terminal-shell upload-view">
       <header className="topbar">
-        <button
-          type="button"
-          className="back-button"
-          onClick={() => window.location.assign('/')}
-        >
-          ← Back
-        </button>
+        <a className="back-button button secondary" href="/">
+          Back
+        </a>
         <h1>Upload</h1>
         <p className="tagline">Write card + store applicant details in separate database.</p>
       </header>
@@ -271,7 +267,7 @@ export default function UploadView() {
           </label>
           <label>
             Phone
-            <input value={form.phone} onChange={(e) => onChange('phone', e.target.value)} required />
+            <input type="tel" value={form.phone} onChange={(e) => onChange('phone', e.target.value)} required />
           </label>
           <label>
             Occupation
@@ -352,7 +348,7 @@ export default function UploadView() {
                             onClick={() => removeFile(q.id)}
                             aria-label={`Remove ${q.file.name}`}
                           >
-                            ✕
+                            Remove
                           </button>
                         )}
                       </div>
@@ -370,7 +366,7 @@ export default function UploadView() {
           </div>
         </form>
 
-        {message && <p className="tagline">{message}</p>}
+        {message && <p className="tagline form-message" role="status" aria-live="polite">{message}</p>}
       </article>
     </main>
   )
