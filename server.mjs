@@ -66,12 +66,21 @@ async function initUploadDb() {
       name TEXT NOT NULL,
       phone TEXT NOT NULL,
       occupation TEXT NOT NULL,
+      address TEXT NOT NULL,
       card_id TEXT NOT NULL,
       card_payload TEXT NOT NULL,
       document_path TEXT,
       created_at TEXT NOT NULL
     );
   `)
+
+  // Migration: add the address column to databases created before it existed.
+  const columns = uploadDb.exec('PRAGMA table_info(submissions);')
+  const hasAddress =
+    columns.length > 0 && columns[0].values.some((row) => row[1] === 'address')
+  if (!hasAddress) {
+    uploadDb.exec("ALTER TABLE submissions ADD COLUMN address TEXT NOT NULL DEFAULT '';")
+  }
 
   await persistUploadDb()
 }
@@ -145,10 +154,11 @@ app.post('/api/upload', upload.single('documents'), async (req, res) => {
     const name = String(req.body.name ?? '')
     const phone = String(req.body.phone ?? '')
     const occupation = String(req.body.occupation ?? '')
+    const address = String(req.body.address ?? '')
     const cardId = String(req.body.cardID ?? '')
     const cardPayload = String(req.body.cardPayload ?? '{}')
 
-    if (!name || !phone || !occupation || !cardId) {
+    if (!name || !phone || !occupation || !address || !cardId) {
       res.status(400).json({ ok: false, error: 'Missing required fields' })
       return
     }
@@ -158,9 +168,9 @@ app.post('/api/upload', upload.single('documents'), async (req, res) => {
     const documentPath = req.file ? `/uploads/${req.file.filename}` : null
 
     const stmt = uploadDb.prepare(
-      'INSERT INTO submissions (id, name, phone, occupation, card_id, card_payload, document_path, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?);',
+      'INSERT INTO submissions (id, name, phone, occupation, address, card_id, card_payload, document_path, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);',
     )
-    stmt.run([id, name, phone, occupation, cardId, cardPayload, documentPath, createdAt])
+    stmt.run([id, name, phone, occupation, address, cardId, cardPayload, documentPath, createdAt])
     stmt.free()
 
     await persistUploadDb()
@@ -172,6 +182,7 @@ app.post('/api/upload', upload.single('documents'), async (req, res) => {
         name,
         phone,
         occupation,
+        address,
         cardId,
         documentPath,
         createdAt,

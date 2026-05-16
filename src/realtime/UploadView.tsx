@@ -7,6 +7,7 @@ type SubmissionResponse = {
     name: string
     phone: string
     occupation: string
+    address: string
     cardId: string
     documentPath: string | null
     createdAt: string
@@ -17,6 +18,7 @@ type UploadFormState = {
   name: string
   phone: string
   occupation: string
+  address: string
   cardID: string
 }
 
@@ -46,6 +48,7 @@ export default function UploadView() {
     name: '',
     phone: '',
     occupation: '',
+    address: '',
     cardID: createGuid(),
   })
   const [file, setFile] = useState<File | null>(null)
@@ -59,6 +62,7 @@ export default function UploadView() {
       name: form.name,
       phone: form.phone,
       occupation: form.occupation,
+      address: form.address,
       ts: new Date().toISOString(),
     }),
     [form],
@@ -68,46 +72,70 @@ export default function UploadView() {
     setForm((prev) => ({ ...prev, [key]: value }))
   }
 
-  const onWriteCard = async () => {
-    if (!supportsWebNfc()) {
-      setMessage('Web NFC not available on this phone/browser. Use Android Chrome.')
-      return
-    }
-
-    try {
-      const ReaderCtor = (window as unknown as { NDEFReader: new () => { write: (data: string) => Promise<void> } }).NDEFReader
-      const ndef = new ReaderCtor()
-      await ndef.write(JSON.stringify(cardPayload))
-      setMessage('NFC card written successfully.')
-    } catch (cause) {
-      setMessage(cause instanceof Error ? `NFC write failed: ${cause.message}` : 'NFC write failed')
-    }
+  const validateForm = (): string | null => {
+    if (!form.name.trim()) return 'Name is required.'
+    if (!form.phone.trim()) return 'Phone is required.'
+    if (!form.occupation.trim()) return 'Occupation is required.'
+    if (!form.address.trim()) return 'Address is required.'
+    if (!file) return 'A document file is required.'
+    return null
   }
 
-  const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    setSubmitting(true)
-    setMessage('')
-
+  const saveToDb = async (): Promise<string> => {
     const body = new FormData()
     body.set('name', form.name)
     body.set('phone', form.phone)
     body.set('occupation', form.occupation)
+    body.set('address', form.address)
     body.set('cardID', form.cardID)
     body.set('cardPayload', JSON.stringify(cardPayload))
     if (file) {
       body.set('documents', file)
     }
 
+    const res = await fetch('/api/upload', { method: 'POST', body })
+    const json = (await res.json()) as SubmissionResponse
+    if (!res.ok || !json.ok) {
+      throw new Error('Server rejected upload')
+    }
+    return json.id
+  }
+
+  const onWriteCard = async () => {
+    const validationError = validateForm()
+    if (validationError) {
+      setMessage(validationError)
+      return
+    }
+
+    if (!supportsWebNfc()) {
+      setMessage('Web NFC not available on this phone/browser. Use Android Chrome.')
+      return
+    }
+
+    setSubmitting(true)
+    setMessage('')
+
     try {
-      const res = await fetch('/api/upload', { method: 'POST', body })
-      const json = (await res.json()) as SubmissionResponse
-      if (!res.ok || !json.ok) {
-        throw new Error('Server rejected upload')
-      }
-      setMessage(`Saved to Upload DB (id: ${json.id}).`)
+      const ReaderCtor = (window as unknown as { NDEFReader: new () => { write: (data: string) => Promise<void> } }).NDEFReader
+      const ndef = new ReaderCtor()
+      await ndef.write(JSON.stringify(cardPayload))
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : 'Upload failed')
+      setMessage(cause instanceof Error ? `NFC write failed: ${cause.message}` : 'NFC write failed')
+      setSubmitting(false)
+      return
+    }
+
+    // NFC write succeeded — auto-save the applicant details to the Upload DB.
+    try {
+      const id = await saveToDb()
+      setMessage(`NFC card written. Saved to Upload DB (id: ${id}).`)
+    } catch (cause) {
+      setMessage(
+        cause instanceof Error
+          ? `NFC card written, but save failed: ${cause.message}`
+          : 'NFC card written, but save failed',
+      )
     } finally {
       setSubmitting(false)
     }
@@ -121,7 +149,7 @@ export default function UploadView() {
       </header>
 
       <article className="panel">
-        <form className="upload-form" onSubmit={onSubmit}>
+        <form className="upload-form" onSubmit={(e) => e.preventDefault()}>
           <label>
             Name
             <input value={form.name} onChange={(e) => onChange('name', e.target.value)} required />
@@ -135,8 +163,8 @@ export default function UploadView() {
             <input value={form.occupation} onChange={(e) => onChange('occupation', e.target.value)} required />
           </label>
           <label>
-            cardID
-            <input value={form.cardID} readOnly required />
+            Address
+            <input value={form.address} onChange={(e) => onChange('address', e.target.value)} required />
           </label>
           <label>
             documents
@@ -144,13 +172,12 @@ export default function UploadView() {
           </label>
 
           <div className="actions">
-            <button type="button" onClick={() => onChange('cardID', createGuid())}>Regenerate cardID</button>
-            <button type="button" onClick={onWriteCard}>Write NFC Card</button>
-            <button type="submit" disabled={submitting}>{submitting ? 'Saving...' : 'Save to Upload DB'}</button>
+            <button type="button" onClick={onWriteCard} disabled={submitting}>
+              {submitting ? 'Working...' : 'Write NFC Card'}
+            </button>
           </div>
         </form>
 
-        <pre className="upload-json">{JSON.stringify(cardPayload, null, 2)}</pre>
         {message && <p className="tagline">{message}</p>}
       </article>
     </main>
