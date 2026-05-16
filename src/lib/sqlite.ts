@@ -1,6 +1,5 @@
 import initSqlJs, { type Database, type SqlJsStatic, type SqlValue } from 'sql.js'
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
-import initSql from '../db/init.sql?raw'
 import type { RecordEntry } from '../components/DatabaseTab'
 
 let sqlJs: SqlJsStatic | null = null
@@ -17,8 +16,12 @@ async function getDatabase(): Promise<Database> {
     })
   }
 
-  const nextDb = new sqlJs.Database()
-  nextDb.exec(initSql)
+  const response = await fetch('/db/records.db')
+  if (!response.ok) {
+    throw new Error(`Unable to load database file: ${response.status}`)
+  }
+  const bytes = new Uint8Array(await response.arrayBuffer())
+  const nextDb = new sqlJs.Database(bytes)
 
   db = nextDb
   return nextDb
