@@ -7,8 +7,9 @@ CREATE TABLE records (
 
 INSERT INTO records (name, role, district, status) VALUES
   ('Sarah Chen', 'Nurse', 'Sector 4', 'Verified'),
-  ('Marcus Hale', 'Engineer', 'Sector 2', 'Missing'),
+  ('Marcus Hale', 'Engineer', 'Sector 5', 'Missing'),
   ('Lina Torres', 'Security', '???', 'Corrupted'),
-  ('James Rowe', 'Engineer', 'Sector 2', 'Verified'),
-  ('Owen Liu', 'Security', 'Sector 2', 'Missing'),
-  ('Petra Hale', 'Medic', 'Sector 3', 'Verified');
+  ('Daniel Okafor', 'Doctor', 'Sector 4', 'Missing'),
+  ('Priya Anand', 'Courier', '???', 'Corrupted'),
+  ('Victor Reyes', 'Clerk', '???', 'Missing'),
+  ('Helena Voss', 'Administrator', 'Sector 1', 'Verified');
