@@ -252,6 +252,13 @@ export default function UploadView() {
   return (
     <main className="terminal-shell">
       <header className="topbar">
+        <button
+          type="button"
+          className="back-button"
+          onClick={() => window.location.assign('/')}
+        >
+          ← Back
+        </button>
         <h1>Upload</h1>
         <p className="tagline">Write card + store applicant details in separate database.</p>
       </header>
