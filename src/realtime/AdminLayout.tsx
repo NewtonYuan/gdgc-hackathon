@@ -83,67 +83,6 @@ export default function AdminLayout({
                 </a>
               </nav>
             </div>
-            <div className="px-3 pb-2">
-              <p className="admin-section-label mt-2">Snackbar Tests</p>
-              <nav className="admin-nav" aria-label="Desktop snackbar test triggers">
-                <a
-                  href="#"
-                  className="admin-nav-item"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    window.dispatchEvent(
-                      new CustomEvent("desktop-snackbar-test", {
-                        detail: { kind: "checker-connected" },
-                      }),
-                    );
-                  }}
-                >
-                  Info: checker connected
-                </a>
-                <a
-                  href="#"
-                  className="admin-nav-item"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    window.dispatchEvent(
-                      new CustomEvent("desktop-snackbar-test", {
-                        detail: { kind: "checker-disconnected" },
-                      }),
-                    );
-                  }}
-                >
-                  Info: checker disconnected
-                </a>
-                <a
-                  href="#"
-                  className="admin-nav-item"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    window.dispatchEvent(
-                      new CustomEvent("desktop-snackbar-test", {
-                        detail: { kind: "verification-success", name: "Amara Singh" },
-                      }),
-                    );
-                  }}
-                >
-                  Success: successful verification by {"{name}"}
-                </a>
-                <a
-                  href="#"
-                  className="admin-nav-item"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    window.dispatchEvent(
-                      new CustomEvent("desktop-snackbar-test", {
-                        detail: { kind: "verification-invalid", name: "Daniel Park" },
-                      }),
-                    );
-                  }}
-                >
-                  Error: invalid verification by {"{name}"}
-                </a>
-              </nav>
-            </div>
             <div className="actions">
               <a className="admin-nav-item" href="/">
                 <img
