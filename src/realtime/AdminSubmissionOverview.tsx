@@ -37,15 +37,32 @@ export default function AdminSubmissionOverview({
   const address =
     typeof parsedPayload.address === "string" ? parsedPayload.address : "—";
   const pid = typeof parsedPayload.pid === "string" ? parsedPayload.pid : "—";
-  const documents = detail.documentPath
-    ? detail.documentPath
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean)
-    : [];
+  const parseDocuments = (documentPath: string | null) => {
+    if (!documentPath) {
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(documentPath);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((item) => (typeof item === "string" ? item.trim() : ""))
+          .filter(Boolean);
+      }
+      if (typeof parsed === "string" && parsed.trim()) {
+        return [parsed.trim()];
+      }
+    } catch {
+      // fallback for legacy plain-string storage
+    }
+    return documentPath
+      .split(",")
+      .map((item) => item.trim().replace(/^"+|"+$/g, ""))
+      .filter(Boolean);
+  };
+  const documents = parseDocuments(detail.documentPath);
 
   return (
-    <article className="overview-panel w-full max-w-[800px] rounded-xl border border-[var(--line)] bg-transparent p-5">
+    <article className="overview-panel w-full max-w-[800px] rounded-xl border border-[var(--line)] bg-transparent p-5 mt-4 ml-5">
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-x-3 gap-y-2 text-base">
         <div className="bg-transparent p-3 flex items-start justify-start min-h-[96px]">
           <img
@@ -119,7 +136,9 @@ export default function AdminSubmissionOverview({
                     >
                       <div className="h-12 w-12 overflow-hidden rounded bg-[#1f1f21] flex items-center justify-center">
                         {isPdf ? (
-                          <span className="text-[10px] font-bold text-red-300">PDF</span>
+                          <span className="text-[10px] font-bold text-red-300">
+                            PDF
+                          </span>
                         ) : (
                           <img
                             src={docPath}
@@ -129,7 +148,9 @@ export default function AdminSubmissionOverview({
                           />
                         )}
                       </div>
-                      <p className="font-semibold text-base truncate">{fileName}</p>
+                      <p className="font-semibold text-base truncate">
+                        {fileName}
+                      </p>
                     </li>
                   );
                 })}

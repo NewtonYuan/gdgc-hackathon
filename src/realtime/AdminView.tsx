@@ -182,11 +182,17 @@ export default function AdminView() {
         throw new Error(json.error ?? "Failed to save decision");
       }
 
+      setRows((prev) =>
+        prev.map((row) =>
+          row.id === detail.id ? { ...row, decision } : row,
+        ),
+      );
       setDetail((prev) =>
         prev
           ? { ...prev, decision, decidedAt: new Date().toISOString() }
           : prev,
       );
+      window.dispatchEvent(new CustomEvent("admin-submission-updated"));
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Failed to save decision",
@@ -237,6 +243,7 @@ export default function AdminView() {
         throw new Error(json.error ?? "Failed to delete submission");
       }
       setRows((prev) => prev.filter((row) => row.id !== detail.id));
+      window.dispatchEvent(new CustomEvent("admin-submission-updated"));
       backToList();
     } catch (cause) {
       setError(
