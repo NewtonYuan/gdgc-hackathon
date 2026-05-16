@@ -51,7 +51,7 @@ function mapSubmissionRow(row) {
     const rawDocumentPath = String(row[7])
     try {
       const parsed = JSON.parse(rawDocumentPath)
-      documentPath = Array.isArray(parsed) && parsed.length > 0 ? String(parsed[0]) : null
+      documentPath = Array.isArray(parsed) && parsed.length > 0 ? rawDocumentPath : null
     } catch {
       documentPath = rawDocumentPath
     }
