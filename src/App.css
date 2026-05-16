@@ -691,6 +691,23 @@ blockquote {
   color: var(--text-muted);
 }
 
+.scan-status {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.scan-status--verified {
+  color: #2f9f49;
+}
+
+.scan-status--invalid {
+  color: var(--accent-bright);
+}
+
+.scan-status--pending {
+  color: #e0a52b;
+}
+
 .npc-panel {
   display: grid;
   grid-template-columns: 1fr 240px;

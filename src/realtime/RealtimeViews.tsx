@@ -43,6 +43,11 @@ function toPersonId(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 }
 
+function readCardField(data: Record<string, unknown> | undefined, key: string): string {
+  const value = data?.[key]
+  return typeof value === 'string' ? value.trim() : ''
+}
+
 function socketUrl(role: 'desktop' | 'phone', deviceId: string): string {
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
   return `${protocol}://${window.location.host}/ws?role=${role}&deviceId=${encodeURIComponent(deviceId)}`
@@ -144,20 +149,24 @@ export function DesktopRealtimeView({ embedded = false }: DesktopRealtimeViewPro
 
       <article className="panel">
         <h2>Last Scan</h2>
-        {lastScan ? (
-          <div className="facts">
-            <p><span>Phone:</span> {lastScan.phoneId}</p>
-            <p><span>Card Person ID:</span> {lastScan.personId}</p>
-            <p><span>Name:</span> {activeRecord?.name ?? 'Unknown Person'}</p>
-            <p><span>Status:</span> {(activeRecord?.decision ?? 'pending').toUpperCase()}</p>
-            {lastScan.cardData && (
+        {lastScan ? (() => {
+          const card = lastScan.cardData
+          const decision = activeRecord?.decision ?? 'pending'
+          return (
+            <div className="facts">
+              <p><span>Name:</span> {readCardField(card, 'name') || activeRecord?.name || 'Unknown Person'}</p>
+              <p><span>Phone:</span> {readCardField(card, 'phone') || '—'}</p>
+              <p><span>Occupation:</span> {readCardField(card, 'occupation') || activeRecord?.occupation || '—'}</p>
+              <p><span>Address:</span> {readCardField(card, 'address') || '—'}</p>
               <p>
-                <span>Card JSON:</span>
-                <pre>{JSON.stringify(lastScan.cardData, null, 2)}</pre>
+                <span>Status:</span>{' '}
+                <strong className={`scan-status scan-status--${decision}`}>
+                  {decision.toUpperCase()}
+                </strong>
               </p>
-            )}
-          </div>
-        ) : (
+            </div>
+          )
+        })() : (
           <p className="tagline">Waiting for phone tap events...</p>
         )}
       </article>
