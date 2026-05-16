@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 
 type SubmissionResponse = {
   ok: boolean
@@ -117,6 +117,7 @@ export default function UploadView() {
   const [dragging, setDragging] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<string>('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const cardPayload = useMemo(
     () => ({
@@ -153,6 +154,13 @@ export default function UploadView() {
       return
     }
     setQueue((prev) => prev.filter((q) => q.id !== id))
+  }
+
+  const openFilePicker = () => {
+    if (submitting) {
+      return
+    }
+    fileInputRef.current?.click()
   }
 
   const onDrop = (event: React.DragEvent<HTMLDivElement>) => {
@@ -272,6 +280,15 @@ export default function UploadView() {
             <div className="upload-docs">
               <div
                 className={`dropzone ${dragging ? 'dragging' : ''}`}
+                role="button"
+                tabIndex={0}
+                onClick={openFilePicker}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    openFilePicker()
+                  }
+                }}
                 onDragOver={(e) => {
                   e.preventDefault()
                   if (!submitting) setDragging(true)
@@ -287,18 +304,17 @@ export default function UploadView() {
                 <div className="dropzone-divider">
                   <span>Or</span>
                 </div>
-                <label className="browse-link">
-                  Browse Your Computer
-                  <input
-                    type="file"
-                    multiple
-                    hidden
-                    onChange={(e) => {
-                      addFiles(e.target.files)
-                      e.target.value = ''
-                    }}
-                  />
-                </label>
+                <span className="browse-link">Browse Your Computer</span>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  hidden
+                  onChange={(e) => {
+                    addFiles(e.target.files)
+                    e.target.value = ''
+                  }}
+                />
               </div>
 
               <div className="filelist">
