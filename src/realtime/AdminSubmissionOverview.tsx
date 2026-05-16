@@ -131,9 +131,7 @@ export default function AdminSubmissionOverview({
                   );
                   const typeLogo = lowerPath.endsWith(".pdf")
                     ? "/images/pdf.png"
-                    : lowerPath.endsWith(".png")
-                      ? "/images/png.png"
-                      : null;
+                    : null;
                   return (
                     <li
                       key={`${docPath}-${index}`}
@@ -157,9 +155,14 @@ export default function AdminSubmissionOverview({
                       <a
                         href={docPath}
                         download={fileName}
-                        className="shrink-0 rounded-lg border border-[var(--line)] bg-[#1f1f21] px-3 py-1.5 text-sm font-semibold text-white no-underline transition-colors hover:bg-[#2a2a2d]"
+                        className="shrink-0 transition-opacity hover:opacity-100"
+                        aria-label={`Download ${fileName}`}
                       >
-                        Download
+                        <img
+                          src="/icons/download.svg"
+                          alt=""
+                          className="h-6 w-6"
+                        />
                       </a>
                     </li>
                   );
