@@ -273,6 +273,7 @@ function GraphScene({ graph, onSelectNode }: GraphSceneProps) {
 function GraphTab({ graph }: GraphTabProps) {
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null)
   const [hiddenNodeIds, setHiddenNodeIds] = useState<string[]>([])
+  const [isHelpOpen, setIsHelpOpen] = useState(false)
   const visibleGraph = useMemo(() => {
     const hiddenSet = new Set(hiddenNodeIds)
 
@@ -290,6 +291,21 @@ function GraphTab({ graph }: GraphTabProps) {
     () => graph.nodes.filter((node) => hiddenNodeIds.includes(node.id)),
     [graph.nodes, hiddenNodeIds],
   )
+  const statusCounts = useMemo(
+    () =>
+      visibleGraph.nodes.reduce(
+        (counts, node) => ({
+          ...counts,
+          [node.statusBucket]: counts[node.statusBucket] + 1,
+        }),
+        {
+          verified: 0,
+          'in-process': 0,
+          'not-verified': 0,
+        } satisfies Record<GraphNodeData['statusBucket'], number>,
+      ),
+    [visibleGraph.nodes],
+  )
 
   const activeSelectedNode =
     selectedNode && !hiddenNodeIds.includes(selectedNode.id) ? selectedNode : null
@@ -305,63 +321,72 @@ function GraphTab({ graph }: GraphTabProps) {
   return (
     <article className="panel" role="tabpanel" aria-label="Relationship graph panel">
       <div className="graph-header">
-        <div>
+        <div className="graph-title-group">
           <h2>People Graph</h2>
-          <p className="tagline">
-            Nodes come from the recovered records. Links are inferred from shared district or shared role.
-          </p>
         </div>
-        <div className="graph-legend" aria-label="Graph legend">
-          <span className="legend-item">
-            <i className="legend-swatch verified-node" aria-hidden="true" />
-            Verified
-          </span>
-          <span className="legend-item">
-            <i className="legend-swatch inprocess-node" aria-hidden="true" />
-            In Process
-          </span>
-          <span className="legend-item">
-            <i className="legend-swatch denied-node" aria-hidden="true" />
-            Not Verified
-          </span>
+        <div className="graph-toolbar">
+          <div className="graph-legend" aria-label="Graph status distribution">
+            <span className="legend-item">
+              <i className="legend-swatch verified-node" aria-hidden="true" />
+              Verified <strong>{statusCounts.verified}</strong>
+            </span>
+            <span className="legend-item">
+              <i className="legend-swatch inprocess-node" aria-hidden="true" />
+              In Process <strong>{statusCounts['in-process']}</strong>
+            </span>
+            <span className="legend-item">
+              <i className="legend-swatch denied-node" aria-hidden="true" />
+              Not Verified <strong>{statusCounts['not-verified']}</strong>
+            </span>
+          </div>
+          <div className="graph-visibility-actions" aria-label="Node visibility controls">
+            <span className="graph-visibility-count">{visibleGraph.nodes.length} visible</span>
+            <span className="graph-visibility-count">{hiddenNodes.length} hidden</span>
+            <button
+              type="button"
+              className="graph-restore-button"
+              onClick={() => setHiddenNodeIds([])}
+              disabled={hiddenNodes.length === 0}
+            >
+              Show All
+            </button>
+          </div>
+          <div className="graph-help">
+            <button
+              type="button"
+              className="graph-help-button"
+              aria-label="Graph help"
+              aria-expanded={isHelpOpen}
+              onClick={() => setIsHelpOpen((current) => !current)}
+            >
+              ?
+            </button>
+            {isHelpOpen ? (
+              <div className="graph-help-popover" role="note">
+                <p>Colors track verification status. Thicker lines mean stronger inferred connections.</p>
+                <p>Click a node to inspect it, or hide it from the sidebar.</p>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
 
-      <section className="graph-visibility-panel" aria-label="Node visibility controls">
-        <div>
-          <h3>Visibility Controls</h3>
-          <p className="tagline">Hide nodes you do not want to inspect right now. Their connections disappear too.</p>
-        </div>
-        <div className="graph-visibility-actions">
-          <span className="graph-visibility-count">{visibleGraph.nodes.length} visible</span>
-          <span className="graph-visibility-count">{hiddenNodes.length} hidden</span>
-          <button
-            type="button"
-            className="graph-restore-button"
-            onClick={() => setHiddenNodeIds([])}
-            disabled={hiddenNodes.length === 0}
-          >
-            Show All
-          </button>
-        </div>
-        {hiddenNodes.length > 0 ? (
-          <div className="graph-hidden-list">
-            {hiddenNodes.map((node) => (
-              <button
-                key={node.id}
-                type="button"
-                className="graph-hidden-chip"
-                onClick={() => showNode(node.id)}
-              >
-                {node.person.fullName}
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </section>
-
       <div className={`graph-layout ${activeSelectedNode ? 'sidebar-open' : ''}`}>
         <div className="graph-stage star-map" aria-label="Recovered people graph visualization">
+          {hiddenNodes.length > 0 ? (
+            <div className="graph-hidden-list" aria-label="Hidden nodes">
+              {hiddenNodes.map((node) => (
+                <button
+                  key={node.id}
+                  type="button"
+                  className="graph-hidden-chip"
+                  onClick={() => showNode(node.id)}
+                >
+                  {node.person.fullName}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <Canvas
             className="graph-canvas"
             camera={{ position: [0, 2.8, 8.4], fov: 52 }}
@@ -377,7 +402,6 @@ function GraphTab({ graph }: GraphTabProps) {
             <p className={`graph-status-pill ${activeSelectedNode.statusBucket}`}>
               {activeSelectedNode.person.verificationStatus.replace('-', ' ')}
             </p>
-            <h3 className="graph-person-code">{activeSelectedNode.shortLabel}</h3>
             <p className="graph-person-name">{activeSelectedNode.person.fullName}</p>
 
             <dl className="graph-person-meta">
@@ -439,31 +463,9 @@ function GraphTab({ graph }: GraphTabProps) {
                   </button>
                 </dd>
               </div>
-              <div>
-                <dt>Database Object</dt>
-                <dd>{JSON.stringify(activeSelectedNode.person)}</dd>
-              </div>
             </dl>
           </aside>
         ) : null}
-      </div>
-
-      <div className="graph-notes">
-        <p>
-          <span>Node rule</span> 3D spheres represent citizens loaded from `records.db`.
-        </p>
-        <p>
-          <span>Color rule</span> Colors come from each citizen's `verification_status`.
-        </p>
-        <p>
-          <span>Connection rule</span> Line thickness comes from `connections.strength` in the database.
-        </p>
-        <p>
-          <span>Inspector rule</span> Click a node to open the sidebar. Click empty space to close it.
-        </p>
-        <p>
-          <span>Visibility rule</span> Hidden nodes and their connected lines are removed until you restore them.
-        </p>
       </div>
     </article>
   )
