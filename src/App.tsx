@@ -4,8 +4,28 @@ import DatabaseTab from './components/DatabaseTab'
 import NpcTab from './components/NpcTab'
 import { INITIAL_QUESTIONS, NPC_POOL } from './lib/gameData'
 import { STARTING_LIVES, getCurrentNpc, useGameLoop } from './lib/gameLoop'
+import { DesktopRealtimeView, PhoneRealtimeView } from './realtime/RealtimeViews'
+import UploadView from './realtime/UploadView'
 
 function App() {
+  const path = window.location.pathname.toLowerCase()
+
+  if (path === '/desktop') {
+    return <DesktopRealtimeView />
+  }
+
+  if (path === '/phone') {
+    return <PhoneRealtimeView />
+  }
+
+  if (path === '/upload') {
+    return <UploadView />
+  }
+
+  return <GameApp />
+}
+
+function GameApp() {
   const [started, setStarted] = useState(false)
   const [activeTab, setActiveTab] = useState<'database' | 'npc'>('database')
   const [booting, setBooting] = useState(true)
@@ -37,27 +57,27 @@ function App() {
           : Math.min(
               prev +
                 (prev < 35
-                  ? 1.2 + Math.random() * 3.2
+                  ? 2.5 + Math.random() * 5.2
                   : prev < 75
-                    ? 0.7 + Math.random() * 2.2
-                    : 0.3 + Math.random() * 1.1),
+                    ? 1.4 + Math.random() * 3.4
+                    : 0.8 + Math.random() * 1.8),
               100,
             )
 
         const delay = shouldPause
-          ? 380 + Math.random() * 700
+          ? 140 + Math.random() * 260
           : prev < 40
-            ? 170 + Math.random() * 200
+            ? 55 + Math.random() * 90
             : prev < 78
-              ? 230 + Math.random() * 310
-              : 320 + Math.random() * 420
+              ? 90 + Math.random() * 130
+              : 120 + Math.random() * 180
 
         if (next >= 100) {
           window.setTimeout(() => {
             if (!cancelled) {
               setBooting(false)
             }
-          }, 620)
+          }, 200)
           return 100
         }
 
@@ -66,7 +86,7 @@ function App() {
       })
     }
 
-    timeoutId = window.setTimeout(tick, 260)
+    timeoutId = window.setTimeout(tick, 80)
 
     return () => {
       cancelled = true
@@ -79,9 +99,14 @@ function App() {
       <main className="boot-screen start-screen">
         <div className="caution-tape tape-one" aria-hidden="true" />
         <div className="caution-tape tape-two" aria-hidden="true" />
-        <button type="button" className="start-button" onClick={() => setStarted(true)}>
-          START
-        </button>
+        <div className="start-actions">
+          <button type="button" className="start-button" onClick={() => setStarted(true)}>
+            START
+          </button>
+          <button type="button" className="start-button" onClick={() => window.location.assign('/upload')}>
+            UPLOAD
+          </button>
+        </div>
       </main>
     )
   }
