@@ -19,7 +19,9 @@ const clients = new Map()
 const dataDir = path.join(__dirname, 'data')
 const uploadsDir = path.join(__dirname, 'uploads')
 const uploadDbPath = path.join(dataDir, 'records.db')
+const verifyDenyDbPath = path.join(dataDir, 'verify_deny.db')
 let uploadDb = null
+let SQL = null
 
 function createServerId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -73,9 +75,11 @@ async function initUploadDb() {
   await fs.mkdir(dataDir, { recursive: true })
   await fs.mkdir(uploadsDir, { recursive: true })
 
-  const SQL = await initSqlJs({
-    locateFile: (file) => path.join(__dirname, 'node_modules', 'sql.js', 'dist', file),
-  })
+  if (!SQL) {
+    SQL = await initSqlJs({
+      locateFile: (file) => path.join(__dirname, 'node_modules', 'sql.js', 'dist', file),
+    })
+  }
 
   let bytes = null
   try {
@@ -119,6 +123,130 @@ async function initUploadDb() {
   uploadDb.exec("UPDATE submissions SET decision = 'pending' WHERE decision IS NULL OR trim(decision) = '';")
 
   await persistUploadDb()
+}
+
+function mapGraphStatus(status) {
+  if (status === 'verified') {
+    return 'verified'
+  }
+
+  if (status === 'pending') {
+    return 'in-process'
+  }
+
+  return 'not-verified'
+}
+
+async function loadVerifyDenyGraph() {
+  if (!SQL) {
+    SQL = await initSqlJs({
+      locateFile: (file) => path.join(__dirname, 'node_modules', 'sql.js', 'dist', file),
+    })
+  }
+
+  const bytes = await fs.readFile(verifyDenyDbPath)
+  const db = new SQL.Database(new Uint8Array(bytes))
+
+  try {
+    const citizenResult = db.exec(`
+      SELECT
+        c.id,
+        c.first_name,
+        c.last_name,
+        c.age,
+        c.gender,
+        c.photo_url,
+        c.street,
+        c.city,
+        c.country,
+        c.occupation_type,
+        c.verification_status,
+        c.trust_score,
+        c.created_at,
+        ed.job_title,
+        ed.employer,
+        ed.work_address,
+        sd.institution,
+        sd.student_id,
+        sd.field_of_study,
+        sd.year_of_study,
+        rd.former_occupation
+      FROM citizens c
+      LEFT JOIN employment_details ed ON ed.citizen_id = c.id
+      LEFT JOIN student_details sd ON sd.citizen_id = c.id
+      LEFT JOIN retired_details rd ON rd.citizen_id = c.id
+      ORDER BY c.first_name, c.last_name;
+    `)
+
+    const edgeResult = db.exec(`
+      SELECT citizen_a_id, citizen_b_id, relationship, strength
+      FROM connections
+      ORDER BY strength DESC, citizen_a_id, citizen_b_id;
+    `)
+
+    const nodes = (citizenResult[0]?.values ?? []).map((row) => {
+      const verificationStatus = String(row[10])
+      const fullName = `${String(row[1])} ${String(row[2])}`
+
+      return {
+        id: String(row[0]),
+        label: `${String(row[1]).charAt(0)}.${String(row[2]).charAt(0)}`,
+        shortLabel: `${String(row[1]).charAt(0)}.${String(row[2]).charAt(0)}`,
+        statusBucket: mapGraphStatus(verificationStatus),
+        person: {
+          id: String(row[0]),
+          firstName: String(row[1]),
+          lastName: String(row[2]),
+          fullName,
+          age: Number(row[3]),
+          gender: String(row[4]),
+          photoUrl: String(row[5]),
+          street: String(row[6]),
+          city: String(row[7]),
+          country: String(row[8]),
+          occupationType: String(row[9]),
+          verificationStatus,
+          trustScore: Number(row[11]),
+          createdAt: String(row[12]),
+          employment: row[13]
+            ? {
+                jobTitle: String(row[13]),
+                employer: String(row[14]),
+                workAddress: String(row[15]),
+              }
+            : null,
+          student: row[16]
+            ? {
+                institution: String(row[16]),
+                studentId: String(row[17]),
+                fieldOfStudy: String(row[18]),
+                yearOfStudy: Number(row[19]),
+              }
+            : null,
+          retired: row[20]
+            ? {
+                formerOccupation: String(row[20]),
+              }
+            : null,
+        },
+      }
+    })
+
+    const edges = (edgeResult[0]?.values ?? []).map((row) => ({
+      id: `${String(row[0])}--${String(row[1])}`,
+      source: String(row[0]),
+      target: String(row[1]),
+      weight: Number(row[3]),
+      relationship: String(row[2]),
+      strength: Number(row[3]),
+      overlapScore: Number(row[3]) * 10,
+      overlapSummary: `${String(row[2])} (${String(row[3])}/10)`,
+    }))
+
+    return { nodes, edges }
+  } finally {
+    db.close()
+  }
 }
 
 const storage = multer.diskStorage({
@@ -256,6 +384,15 @@ app.get('/api/admin/submissions', async (_req, res) => {
     res.json({ ok: true, submissions })
   } catch (cause) {
     res.status(500).json({ ok: false, error: cause instanceof Error ? cause.message : 'Failed to list submissions' })
+  }
+})
+
+app.get('/api/admin/graph', async (_req, res) => {
+  try {
+    const graph = await loadVerifyDenyGraph()
+    res.json({ ok: true, graph })
+  } catch (cause) {
+    res.status(500).json({ ok: false, error: cause instanceof Error ? cause.message : 'Failed to load graph' })
   }
 })
 

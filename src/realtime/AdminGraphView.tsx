@@ -1,70 +1,41 @@
-import { useEffect, useState } from "react";
-import GraphTab from "../components/GraphTab";
-import type { RecordEntry } from "../lib/graphData";
-import AdminLayout from "./AdminLayout";
-
-type SubmissionSummary = {
-  name: string;
-  occupation: string;
-  address?: string;
-  decision: "pending" | "verified" | "invalid";
-};
+import { useEffect, useState } from 'react'
+import GraphTab from '../components/GraphTab'
+import type { GraphPayload } from '../lib/graphData'
+import AdminLayout from './AdminLayout'
 
 export default function AdminGraphView() {
-  const [rows, setRows] = useState<RecordEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [graph, setGraph] = useState<GraphPayload | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    let active = true;
-    fetch("/api/admin/submissions")
+    let active = true
+    fetch('/api/admin/graph')
       .then((res) => res.json())
-      .then(
-        (json: {
-          ok: boolean;
-          submissions?: SubmissionSummary[];
-          error?: string;
-        }) => {
-          if (!active) {
-            return;
-          }
-          if (!json.ok) {
-            throw new Error(json.error ?? "Failed to load submissions");
-          }
-          const list = (json.submissions ?? []).map(
-            (row) =>
-              ({
-                name: row.name,
-                role: row.occupation,
-                district: row.address?.trim() ? row.address : "???",
-                status:
-                  row.decision === "verified"
-                    ? "Verified"
-                    : row.decision === "pending"
-                      ? "Missing"
-                      : "Corrupted",
-              }) satisfies RecordEntry,
-          );
-          setRows(list);
-        },
-      )
+      .then((json: { ok: boolean; graph?: GraphPayload; error?: string }) => {
+        if (!active) {
+          return
+        }
+        if (!json.ok) {
+          throw new Error(json.error ?? 'Failed to load graph')
+        }
+        setGraph(json.graph ?? { nodes: [], edges: [] })
+      })
       .catch((cause: unknown) => {
         if (active) {
-          setError(
-            cause instanceof Error ? cause.message : "Failed to load graph",
-          );
+          setError(cause instanceof Error ? cause.message : 'Failed to load graph')
         }
       })
       .finally(() => {
         if (active) {
-          setLoading(false);
+          setLoading(false)
         }
-      });
+      })
 
     return () => {
-      active = false;
-    };
-  }, []);
+      active = false
+    }
+  }, [])
 
   return (
     <AdminLayout active="graph">
@@ -82,8 +53,9 @@ export default function AdminGraphView() {
           <p className="tagline">{error}</p>
         </article>
       ) : (
-        <GraphTab database={rows} />
+        <GraphTab graph={graph ?? { nodes: [], edges: [] }} />
       )}
     </AdminLayout>
-  );
+  )
 }
+
