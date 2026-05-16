@@ -18,9 +18,8 @@ const clients = new Map()
 
 const dataDir = path.join(__dirname, 'data')
 const uploadsDir = path.join(__dirname, 'uploads')
-const uploadDbPath = path.join(dataDir, 'upload_records.db')
+const uploadDbPath = path.join(dataDir, 'records.db')
 let uploadDb = null
-let SQL = null
 
 function createServerId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -32,6 +31,22 @@ function createServerId() {
 function sendJson(ws, payload) {
   if (ws.readyState === ws.OPEN) {
     ws.send(JSON.stringify(payload))
+  }
+}
+
+function mapSubmissionRow(row) {
+  return {
+    id: String(row[0]),
+    name: String(row[1]),
+    phone: String(row[2]),
+    occupation: String(row[3]),
+    address: String(row[4] ?? ''),
+    cardId: String(row[5]),
+    cardPayload: String(row[6] ?? '{}'),
+    documentPath: row[7] ? String(row[7]) : null,
+    createdAt: String(row[8]),
+    decision: row[9] ? String(row[9]) : null,
+    decidedAt: row[10] ? String(row[10]) : null,
   }
 }
 
@@ -47,7 +62,7 @@ async function initUploadDb() {
   await fs.mkdir(dataDir, { recursive: true })
   await fs.mkdir(uploadsDir, { recursive: true })
 
-  SQL = await initSqlJs({
+  const SQL = await initSqlJs({
     locateFile: (file) => path.join(__dirname, 'node_modules', 'sql.js', 'dist', file),
   })
 
@@ -70,16 +85,23 @@ async function initUploadDb() {
       card_id TEXT NOT NULL,
       card_payload TEXT NOT NULL,
       document_path TEXT,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      decision TEXT,
+      decided_at TEXT
     );
   `)
 
-  // Migration: add the address column to databases created before it existed.
+  // Migrations for older DB files.
   const columns = uploadDb.exec('PRAGMA table_info(submissions);')
-  const hasAddress =
-    columns.length > 0 && columns[0].values.some((row) => row[1] === 'address')
-  if (!hasAddress) {
+  const colNames = columns.length > 0 ? columns[0].values.map((row) => String(row[1])) : []
+  if (!colNames.includes('address')) {
     uploadDb.exec("ALTER TABLE submissions ADD COLUMN address TEXT NOT NULL DEFAULT '';")
+  }
+  if (!colNames.includes('decision')) {
+    uploadDb.exec('ALTER TABLE submissions ADD COLUMN decision TEXT;')
+  }
+  if (!colNames.includes('decided_at')) {
+    uploadDb.exec('ALTER TABLE submissions ADD COLUMN decided_at TEXT;')
   }
 
   await persistUploadDb()
@@ -96,6 +118,7 @@ const storage = multer.diskStorage({
 })
 
 const upload = multer({ storage })
+app.use(express.json())
 
 httpServer.on('upgrade', (req, socket, head) => {
   if (!req.url?.startsWith('/ws')) {
@@ -170,7 +193,7 @@ app.post('/api/upload', upload.array('documents'), async (req, res) => {
       : []
 
     const stmt = uploadDb.prepare(
-      'INSERT INTO submissions (id, name, phone, occupation, address, card_id, card_payload, document_path, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);',
+      'INSERT INTO submissions (id, name, phone, occupation, address, card_id, card_payload, document_path, created_at, decision, decided_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
     )
     stmt.run([id, name, phone, occupation, address, cardId, cardPayload, JSON.stringify(documentPaths), createdAt])
     stmt.free()
@@ -192,6 +215,83 @@ app.post('/api/upload', upload.array('documents'), async (req, res) => {
     })
   } catch (cause) {
     res.status(500).json({ ok: false, error: cause instanceof Error ? cause.message : 'Upload failed' })
+  }
+})
+
+app.get('/api/admin/submissions', async (_req, res) => {
+  try {
+    if (!uploadDb) {
+      res.status(500).json({ ok: false, error: 'Upload DB not initialized' })
+      return
+    }
+
+    const result = uploadDb.exec(
+      'SELECT id, name, phone, occupation, address, card_id, card_payload, document_path, created_at, decision, decided_at FROM submissions ORDER BY created_at DESC;',
+    )
+    const rows = result[0]?.values ?? []
+    const submissions = rows.map(mapSubmissionRow).map((row) => ({
+      id: row.id,
+      name: row.name,
+      phone: row.phone,
+      occupation: row.occupation,
+      address: row.address,
+      cardId: row.cardId,
+      createdAt: row.createdAt,
+      decision: row.decision,
+    }))
+    res.json({ ok: true, submissions })
+  } catch (cause) {
+    res.status(500).json({ ok: false, error: cause instanceof Error ? cause.message : 'Failed to list submissions' })
+  }
+})
+
+app.get('/api/admin/submissions/:id', async (req, res) => {
+  try {
+    if (!uploadDb) {
+      res.status(500).json({ ok: false, error: 'Upload DB not initialized' })
+      return
+    }
+
+    const stmt = uploadDb.prepare(
+      'SELECT id, name, phone, occupation, address, card_id, card_payload, document_path, created_at, decision, decided_at FROM submissions WHERE id = ? LIMIT 1;',
+    )
+    stmt.bind([String(req.params.id)])
+    if (!stmt.step()) {
+      stmt.free()
+      res.status(404).json({ ok: false, error: 'Submission not found' })
+      return
+    }
+    const row = stmt.get()
+    stmt.free()
+    const submission = mapSubmissionRow(row)
+    res.json({ ok: true, submission })
+  } catch (cause) {
+    res.status(500).json({ ok: false, error: cause instanceof Error ? cause.message : 'Failed to load submission' })
+  }
+})
+
+app.post('/api/admin/submissions/:id/decision', async (req, res) => {
+  try {
+    if (!uploadDb) {
+      res.status(500).json({ ok: false, error: 'Upload DB not initialized' })
+      return
+    }
+
+    const decision = String(req.body?.decision ?? '')
+    if (decision !== 'ACCEPTED' && decision !== 'DECLINED') {
+      res.status(400).json({ ok: false, error: 'Invalid decision value' })
+      return
+    }
+
+    const decidedAt = new Date().toISOString()
+    const stmt = uploadDb.prepare('UPDATE submissions SET decision = ?, decided_at = ? WHERE id = ?;')
+    stmt.run([decision, decidedAt, String(req.params.id)])
+    stmt.free()
+    await persistUploadDb()
+
+    res.json({ ok: true })
+  } catch (cause) {
+    res.status(500).json({ ok: false, error: cause instanceof Error ? cause.message : 'Failed to save decision' })
   }
 })
 

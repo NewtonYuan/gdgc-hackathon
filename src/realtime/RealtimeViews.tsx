@@ -1,6 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
-import type { RecordEntry } from '../components/DatabaseTab'
-import { fetchRecords } from '../lib/sqlite'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+
+type RecordEntry = {
+  name: string
+  occupation: string
+  decision: 'ACCEPTED' | 'DECLINED' | null
+}
 
 type ScanEvent = {
   type: 'scan'
@@ -44,7 +48,11 @@ function socketUrl(role: 'desktop' | 'phone', deviceId: string): string {
   return `${protocol}://${window.location.host}/ws?role=${role}&deviceId=${encodeURIComponent(deviceId)}`
 }
 
-export function DesktopRealtimeView() {
+type DesktopRealtimeViewProps = {
+  embedded?: boolean
+}
+
+export function DesktopRealtimeView({ embedded = false }: DesktopRealtimeViewProps) {
   const [records, setRecords] = useState<RecordEntry[]>([])
   const [error, setError] = useState<string | null>(null)
   const [connection, setConnection] = useState('connecting')
@@ -60,10 +68,21 @@ export function DesktopRealtimeView() {
 
   useEffect(() => {
     let active = true
-    fetchRecords()
-      .then((rows) => {
+    fetch('/api/admin/submissions')
+      .then((res) => res.json())
+      .then((json: { ok: boolean; submissions?: Array<{ name: string; occupation: string; decision: 'ACCEPTED' | 'DECLINED' | null }> }) => {
         if (active) {
-          setRecords(rows)
+          if (json.ok && Array.isArray(json.submissions)) {
+            setRecords(
+              json.submissions.map((item) => ({
+                name: item.name,
+                occupation: item.occupation,
+                decision: item.decision ?? null,
+              })),
+            )
+          } else {
+            setRecords([])
+          }
         }
       })
       .catch((cause: unknown) => {
@@ -91,7 +110,7 @@ export function DesktopRealtimeView() {
 
       setLastScan({ personId: payload.personId, phoneId: payload.phoneId, cardData: payload.cardData })
       const person = personMap.get(payload.personId)
-      const verified = person?.status === 'Verified' || person?.status === 'Trusted'
+      const verified = person?.decision === 'ACCEPTED'
 
       const verdict: VerdictEvent = {
         type: 'verdict',
@@ -99,7 +118,7 @@ export function DesktopRealtimeView() {
         phoneId: payload.phoneId,
         verified: Boolean(verified),
         name: person?.name ?? 'Unknown Person',
-        status: person?.status ?? 'Unknown',
+        status: person?.decision ?? 'UNKNOWN',
       }
       ws.send(JSON.stringify(verdict))
     }
@@ -109,8 +128,8 @@ export function DesktopRealtimeView() {
 
   const activeRecord = lastScan ? personMap.get(lastScan.personId) : null
 
-  return (
-    <main className="terminal-shell">
+  const content = (
+    <>
       <header className="topbar">
         <h1>Desktop Verifier</h1>
         <p className="tagline">Connection: {connection}</p>
@@ -125,7 +144,7 @@ export function DesktopRealtimeView() {
             <p><span>Phone:</span> {lastScan.phoneId}</p>
             <p><span>Card Person ID:</span> {lastScan.personId}</p>
             <p><span>Name:</span> {activeRecord?.name ?? 'Unknown Person'}</p>
-            <p><span>Status:</span> {activeRecord?.status ?? 'Unknown'}</p>
+            <p><span>Status:</span> {activeRecord?.decision ?? 'UNKNOWN'}</p>
             {lastScan.cardData && (
               <p>
                 <span>Card JSON:</span>
@@ -146,16 +165,18 @@ export function DesktopRealtimeView() {
           ))}
         </div>
       </article>
-    </main>
+    </>
   )
+
+  if (embedded) {
+    return content
+  }
+
+  return <main className="terminal-shell">{content}</main>
 }
 
 export function PhoneRealtimeView() {
   const [deviceId] = useState(() => createClientId())
-  const [personId, setPersonId] = useState(() => {
-    const params = new URLSearchParams(window.location.search)
-    return params.get('pid') ?? ''
-  })
   const [cardData] = useState<Record<string, unknown> | null>(() => {
     const params = new URLSearchParams(window.location.search)
     const raw = params.get('card')
@@ -171,6 +192,18 @@ export function PhoneRealtimeView() {
   const [connection, setConnection] = useState('connecting')
   const [result, setResult] = useState<{ verified: boolean; name: string; status: string } | null>(null)
   const [sent, setSent] = useState(false)
+  const [missingId, setMissingId] = useState(true)
+
+  const trySendScan = useCallback((personId: string, payload: Record<string, unknown> | null) => {
+    const ws = (window as unknown as { __scanSocket?: WebSocket }).__scanSocket
+    if (ws?.readyState !== WebSocket.OPEN) {
+      return false
+    }
+    ws.send(JSON.stringify({ type: 'scan', personId, phoneId: deviceId, cardData: payload ?? undefined }))
+    setSent(true)
+    setMissingId(false)
+    return true
+  }, [deviceId])
 
   useEffect(() => {
     const ws = new WebSocket(socketUrl('phone', deviceId))
@@ -196,25 +229,71 @@ export function PhoneRealtimeView() {
     const effectivePid = pid ?? (typeof cardData?.pid === 'string' ? cardData.pid : null)
     if (effectivePid) {
       window.setTimeout(() => {
-        const ws = (window as unknown as { __scanSocket?: WebSocket }).__scanSocket
-        if (ws?.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'scan', personId: effectivePid, phoneId: deviceId, cardData: cardData ?? undefined }))
-          setSent(true)
-        }
+        trySendScan(effectivePid, cardData)
       }, 250)
     }
-  }, [deviceId, cardData])
+  }, [cardData, trySendScan])
 
-  const bgClass = result ? (result.verified ? 'phone-ok' : 'phone-bad') : 'phone-neutral'
-
-  const onSend = () => {
-    const ws = (window as unknown as { __scanSocket?: WebSocket }).__scanSocket
-    if (!personId || ws?.readyState !== WebSocket.OPEN) {
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('NDEFReader' in window)) {
       return
     }
-    ws.send(JSON.stringify({ type: 'scan', personId, phoneId: deviceId, cardData: cardData ?? undefined }))
-    setSent(true)
-  }
+
+    let active = true
+    let reader: { scan: () => Promise<void>; onreading: ((event: unknown) => void) | null } | null = null
+
+    const decodeRecordText = (record: { recordType: string; data?: DataView; encoding?: string }): string | null => {
+      if (record.recordType !== 'text' || !record.data) {
+        return null
+      }
+      const decoder = new TextDecoder(record.encoding || 'utf-8')
+      return decoder.decode(record.data)
+    }
+
+    const startScan = async () => {
+      try {
+        const ReaderCtor = (window as unknown as { NDEFReader: new () => { scan: () => Promise<void>; onreading: ((event: unknown) => void) | null } }).NDEFReader
+        reader = new ReaderCtor()
+        await reader.scan()
+        reader.onreading = (event: unknown) => {
+          if (!active) {
+            return
+          }
+          const msg = event as { message?: { records?: Array<{ recordType: string; data?: DataView; encoding?: string }> } }
+          const records = msg.message?.records ?? []
+          for (const record of records) {
+            const text = decodeRecordText(record)
+            if (!text) {
+              continue
+            }
+            try {
+              const parsed = JSON.parse(text) as Record<string, unknown>
+              const pid = typeof parsed.pid === 'string' ? parsed.pid : null
+              if (pid) {
+                trySendScan(pid, parsed)
+                return
+              }
+            } catch {
+              // non-JSON text record, ignore
+            }
+          }
+          setMissingId(true)
+        }
+      } catch {
+        // scanning may require gesture or may be unsupported in this context
+      }
+    }
+
+    startScan()
+    return () => {
+      active = false
+      if (reader) {
+        reader.onreading = null
+      }
+    }
+  }, [deviceId, trySendScan])
+
+  const bgClass = result ? (result.verified ? 'phone-ok' : 'phone-bad') : 'phone-neutral'
 
   return (
     <main className={`phone-screen ${bgClass}`}>
@@ -223,15 +302,13 @@ export function PhoneRealtimeView() {
         {!result ? (
           <>
             <h1>Tap Card</h1>
-            <input
-              className="phone-input"
-              value={personId}
-              onChange={(e) => setPersonId(e.target.value)}
-              placeholder="person id (e.g. sarah-chen)"
-            />
-            <button type="button" onClick={onSend} disabled={!personId || sent}>
-              {sent ? 'Waiting...' : 'Send Scan'}
-            </button>
+            <p className="tagline">
+              {missingId
+                ? 'No person ID detected. Use NFC JSON with a pid field.'
+                : sent
+                  ? 'Scan sent. Waiting for desktop verdict...'
+                  : 'Waiting for card data (NFC JSON)...'}
+            </p>
           </>
         ) : (
           <>
