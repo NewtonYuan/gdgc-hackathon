@@ -144,7 +144,7 @@ httpServer.on('upgrade', (req, socket, head) => {
 
 app.use('/uploads', express.static(uploadsDir))
 
-app.post('/api/upload', upload.single('documents'), async (req, res) => {
+app.post('/api/upload', upload.array('documents'), async (req, res) => {
   try {
     if (!uploadDb) {
       res.status(500).json({ ok: false, error: 'Upload DB not initialized' })
@@ -165,12 +165,14 @@ app.post('/api/upload', upload.single('documents'), async (req, res) => {
 
     const id = `sub-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
     const createdAt = new Date().toISOString()
-    const documentPath = req.file ? `/uploads/${req.file.filename}` : null
+    const documentPaths = Array.isArray(req.files)
+      ? req.files.map((f) => `/uploads/${f.filename}`)
+      : []
 
     const stmt = uploadDb.prepare(
       'INSERT INTO submissions (id, name, phone, occupation, address, card_id, card_payload, document_path, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);',
     )
-    stmt.run([id, name, phone, occupation, address, cardId, cardPayload, documentPath, createdAt])
+    stmt.run([id, name, phone, occupation, address, cardId, cardPayload, JSON.stringify(documentPaths), createdAt])
     stmt.free()
 
     await persistUploadDb()
@@ -184,7 +186,7 @@ app.post('/api/upload', upload.single('documents'), async (req, res) => {
         occupation,
         address,
         cardId,
-        documentPath,
+        documentPaths,
         createdAt,
       },
     })
