@@ -171,68 +171,94 @@ export default function AdminView() {
   }
 
   return (
-    <main className="terminal-shell">
-      <div className="actions">
-        <button type="button" onClick={() => window.location.assign('/')}>Back</button>
-      </div>
-      <header className="topbar">
-        <h1>Admin View</h1>
-      </header>
-
-      {error && (
-        <article className="panel">
-          <p className="tagline">{error}</p>
-        </article>
-      )}
-
-      {!selectedId ? (
-        <article className="panel">
-          <h2>Applicant Database</h2>
-          <div className="admin-table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Phone</th>
-                  <th>Occupation</th>
-                  <th>cardID</th>
-                  <th>Status</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={6}>No submissions yet.</td>
-                  </tr>
-                ) : (
-                  rows.map((row) => (
-                    <tr key={row.id}>
-                      <td>{row.name}</td>
-                      <td>{row.phone}</td>
-                      <td>{row.occupation}</td>
-                      <td>{row.cardId}</td>
-                      <td>{row.decision ?? 'PENDING'}</td>
-                      <td>
-                        <button type="button" className="verify" onClick={() => openVerify(row.id)}>
-                          Verify
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+    <main className="admin-shell">
+      <div className="admin-layout">
+        <aside className="admin-sidebar panel">
+          <div className="admin-brand">
+            <strong>records.io</strong>
           </div>
-        </article>
-      ) : detail ? (
-        <AdminSubmissionOverview
-          detail={detail}
-          saving={saving}
-          onBack={backToList}
-          onDecide={decide}
-        />
-      ) : null}
+
+          <nav className="admin-nav" aria-label="Admin sections">
+            <button type="button" className="admin-nav-item">Dashboard</button>
+            <button type="button" className="admin-nav-item">Forms</button>
+            <button type="button" className="admin-nav-item active">Submissions</button>
+            <button type="button" className="admin-nav-item">Profile</button>
+            <button type="button" className="admin-nav-item">Account</button>
+          </nav>
+
+          <div className="admin-stats">
+            <p><span>Total</span> {rows.length}</p>
+            <p><span>Pending</span> {rows.filter((r) => !r.decision).length}</p>
+            <p><span>Accepted</span> {rows.filter((r) => r.decision === 'ACCEPTED').length}</p>
+            <p><span>Declined</span> {rows.filter((r) => r.decision === 'DECLINED').length}</p>
+          </div>
+
+          <div className="actions">
+            <button type="button" onClick={() => window.location.assign('/')}>Back</button>
+          </div>
+        </aside>
+
+        <section className="admin-main">
+          <header className="topbar">
+            <h1>Admin View</h1>
+          </header>
+
+          {error && (
+            <article className="panel">
+              <p className="tagline">{error}</p>
+            </article>
+          )}
+
+          {!selectedId ? (
+            <article className="panel">
+              <h2>Applicant Database</h2>
+              <div className="admin-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Phone</th>
+                      <th>Occupation</th>
+                      <th>cardID</th>
+                      <th>Status</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.length === 0 ? (
+                      <tr>
+                        <td colSpan={6}>No submissions yet.</td>
+                      </tr>
+                    ) : (
+                      rows.map((row) => (
+                        <tr key={row.id}>
+                          <td>{row.name}</td>
+                          <td>{row.phone}</td>
+                          <td>{row.occupation}</td>
+                          <td>{row.cardId}</td>
+                          <td>{row.decision ?? 'PENDING'}</td>
+                          <td>
+                            <button type="button" className="verify" onClick={() => openVerify(row.id)}>
+                              Verify
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </article>
+          ) : detail ? (
+            <AdminSubmissionOverview
+              detail={detail}
+              saving={saving}
+              onBack={backToList}
+              onDecide={decide}
+            />
+          ) : null}
+        </section>
+      </div>
     </main>
   )
 }
