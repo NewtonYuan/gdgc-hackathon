@@ -2,7 +2,7 @@ export type RecordEntry = {
   name: string
   role: string
   district: string
-  status: 'Verified' | 'Missing' | 'Corrupted'
+  status: 'Verified' | 'Missing' | 'Corrupted' | 'Trusted' | 'Unverified'
 }
 
 type DatabaseTabProps = {

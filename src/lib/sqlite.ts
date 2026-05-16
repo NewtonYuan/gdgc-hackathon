@@ -4,8 +4,12 @@ import type { RecordEntry } from '../components/DatabaseTab'
 
 const seedRows: RecordEntry[] = [
   { name: 'Sarah Chen', role: 'Nurse', district: 'Sector 4', status: 'Verified' },
-  { name: 'Marcus Hale', role: 'Engineer', district: 'Sector 2', status: 'Missing' },
+  { name: 'Marcus Hale', role: 'Engineer', district: 'Sector 5', status: 'Missing' },
   { name: 'Lina Torres', role: 'Security', district: '???', status: 'Corrupted' },
+  { name: 'Daniel Okafor', role: 'Doctor', district: 'Sector 4', status: 'Missing' },
+  { name: 'Priya Anand', role: 'Courier', district: '???', status: 'Corrupted' },
+  { name: 'Victor Reyes', role: 'Clerk', district: '???', status: 'Missing' },
+  { name: 'Helena Voss', role: 'Administrator', district: 'Sector 1', status: 'Verified' },
 ]
 
 let sqlJs: SqlJsStatic | null = null
