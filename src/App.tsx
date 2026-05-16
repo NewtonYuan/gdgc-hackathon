@@ -3,6 +3,7 @@ import { PhoneRealtimeView } from './realtime/RealtimeViews'
 import UploadView from './realtime/UploadView'
 import AdminView from './realtime/AdminView'
 import DesktopAdminView from './realtime/DesktopAdminView'
+import CitizensView from './realtime/CitizensView'
 import AdminGraphView from './realtime/AdminGraphView'
 
 function App() {
@@ -24,6 +25,10 @@ function App() {
     return <AdminView />
   }
 
+  if (path === '/citizens') {
+    return <CitizensView />
+  }
+
   if (path === '/admin/graph') {
     return <AdminGraphView />
   }
@@ -39,15 +44,15 @@ function LandingView() {
         <span>records.io</span>
       </div>
       <div className="start-actions">
-        <button type="button" className="start-button" onClick={() => window.location.assign('/upload')}>
+        <a className="start-button button" href="/upload">
           UPLOAD
-        </button>
-        <button type="button" className="start-button" onClick={() => window.location.assign('/admin')}>
+        </a>
+        <a className="start-button button" href="/admin">
           ADMIN VIEW
-        </button>
-        <button type="button" className="start-button" onClick={() => window.location.assign('/checker')}>
+        </a>
+        <a className="start-button button" href="/checker">
           CHECKER
-        </button>
+        </a>
       </div>
     </main>
   )

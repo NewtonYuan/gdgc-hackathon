@@ -254,7 +254,7 @@ export default function AdminView() {
       </section>
 
       {error && (
-        <article className="panel">
+        <article className="panel" role="alert">
           <p className="tagline">{error}</p>
         </article>
       )}
@@ -263,14 +263,15 @@ export default function AdminView() {
         <article className="panel admin-table-panel">
           <div className="admin-table-wrap">
             <table>
+              <caption>Applicant submissions and review status</caption>
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Phone</th>
-                  <th>Occupation</th>
-                  <th>cardID</th>
-                      <th className="status-col">Status</th>
-                      <th className="status-col">Action</th>
+                  <th scope="col">Name</th>
+                  <th scope="col">Phone</th>
+                  <th scope="col">Occupation</th>
+                  <th scope="col">Card ID</th>
+                  <th scope="col" className="status-col">Status</th>
+                  <th scope="col" className="status-col">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -285,7 +286,7 @@ export default function AdminView() {
                       <td>{row.phone}</td>
                       <td>{row.occupation}</td>
                       <td>{row.cardId}</td>
-                      <td className={`status-col ${row.decision}`}>{row.decision.toUpperCase()}</td>
+                      <td className="status-col"><span className={`status-badge ${row.decision}`}>{row.decision}</span></td>
                       <td className="status-col">
                         <button type="button" className="verify" onClick={() => openVerify(row.id)}>
                           Review
