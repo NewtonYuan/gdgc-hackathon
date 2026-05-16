@@ -277,8 +277,29 @@ type ProfileModalProps = {
   onSelectNode: (node: GraphNodeData) => void
 }
 
+type CloseButtonProps = {
+  ariaLabel: string
+  className?: string
+  onClick: () => void
+}
+
 const FOCUSABLE_SELECTOR =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+
+function CloseButton({ ariaLabel, className = '', onClick }: CloseButtonProps) {
+  return (
+    <button
+      type="button"
+      className={`graph-icon-close ${className}`.trim()}
+      aria-label={ariaLabel}
+      onClick={onClick}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M18 6 6 18M6 6l12 12" />
+      </svg>
+    </button>
+  )
+}
 
 function formatValue(value: string | number | null | undefined) {
   if (value === null || value === undefined || value === '') {
@@ -313,15 +334,11 @@ function statusLabel(statusBucket: GraphNodeData['statusBucket']) {
   return 'verified'
 }
 
-function getInitials(node: GraphNodeData) {
-  const first = node.person.firstName.at(0) ?? ''
-  const last = node.person.lastName.at(0) ?? ''
-  return `${first}${last}`.toUpperCase() || node.shortLabel
-}
-
 function DetailRow({ label, value }: { label: string; value: string | number | null | undefined }) {
+  const isEmpty = value === null || value === undefined || value === ''
+
   return (
-    <div className="graph-modal-row">
+    <div className={`graph-modal-row ${isEmpty ? 'empty' : ''}`}>
       <dt>{label}</dt>
       <dd>{formatValue(value)}</dd>
     </div>
@@ -330,6 +347,11 @@ function DetailRow({ label, value }: { label: string; value: string | number | n
 
 function ProfileModal({ graph, node, onClose, onSelectNode }: ProfileModalProps) {
   const modalRef = useRef<HTMLDivElement>(null)
+  const confirmRef = useRef<HTMLElement>(null)
+  const confirmActionRef = useRef<'deny' | null>(null)
+  const [confirmAction, setConfirmAction] = useState<'deny' | null>(null)
+  const [confirmNote, setConfirmNote] = useState('')
+  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false)
   const linkedNodes = useMemo(() => {
     return graph.edges
       .filter((edge) => edge.source === node.id || edge.target === node.id)
@@ -352,8 +374,18 @@ function ProfileModal({ graph, node, onClose, onSelectNode }: ProfileModalProps)
     } satisfies Record<GraphNodeData['statusBucket'], number>,
   )
   const fullAddress = [node.person.street, node.person.city, node.person.country].filter(Boolean).join(', ')
-  const hasPhoto = Boolean(node.person.photoUrl)
   const trustScore = Math.min(Math.max(node.person.trustScore, 0), 100)
+  const hasEmploymentData = Boolean(
+    node.person.employment ||
+      node.person.student ||
+      node.person.retired?.formerOccupation,
+  )
+  const confirmVerb = 'Deny'
+  const confirmStatus = 'not verified'
+
+  useEffect(() => {
+    confirmActionRef.current = confirmAction
+  }, [confirmAction])
 
   useEffect(() => {
     const previousActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null
@@ -363,16 +395,23 @@ function ProfileModal({ graph, node, onClose, onSelectNode }: ProfileModalProps)
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         event.preventDefault()
+        if (confirmActionRef.current) {
+          setConfirmAction(null)
+          setConfirmNote('')
+          return
+        }
         onClose()
         return
       }
 
-      if (event.key !== 'Tab' || !modalRef.current) {
+      const focusContainer = confirmActionRef.current ? confirmRef.current : modalRef.current
+
+      if (event.key !== 'Tab' || !focusContainer) {
         return
       }
 
       const focusableElements = Array.from(
-        modalRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+        focusContainer.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
       ).filter((element) => !element.hasAttribute('disabled'))
 
       if (focusableElements.length === 0) {
@@ -400,6 +439,25 @@ function ProfileModal({ graph, node, onClose, onSelectNode }: ProfileModalProps)
     }
   }, [onClose])
 
+  function openConfirm(action: 'deny') {
+    setConfirmAction(action)
+    setConfirmNote('')
+    window.setTimeout(() => {
+      const firstFocusable = confirmRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
+      firstFocusable?.focus()
+    }, 0)
+  }
+
+  function closeConfirm() {
+    setConfirmAction(null)
+    setConfirmNote('')
+  }
+
+  function confirmVerifierAction() {
+    setConfirmAction(null)
+    setConfirmNote('')
+  }
+
   return (
     <div className="graph-modal-backdrop" onMouseDown={onClose}>
       <section
@@ -411,18 +469,11 @@ function ProfileModal({ graph, node, onClose, onSelectNode }: ProfileModalProps)
         onMouseDown={(event) => event.stopPropagation()}
       >
         <header className="graph-modal-header">
-          <div className="graph-modal-photo" aria-hidden="true">
-            {hasPhoto ? <img src={node.person.photoUrl} alt="" /> : <span>{getInitials(node)}</span>}
-          </div>
-          <div>
+          <div className="graph-modal-title-row">
             <h2 id="graph-profile-title">{node.person.fullName}</h2>
             <span className={`graph-status-pill ${node.statusBucket}`}>{statusLabel(node.statusBucket)}</span>
           </div>
-          <button type="button" className="graph-modal-close" aria-label="Close full profile" onClick={onClose}>
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M18 6 6 18M6 6l12 12" />
-            </svg>
-          </button>
+          <CloseButton ariaLabel="Close profile" className="graph-modal-close" onClick={onClose} />
         </header>
 
         <div className="graph-modal-body">
@@ -434,7 +485,6 @@ function ProfileModal({ graph, node, onClose, onSelectNode }: ProfileModalProps)
               <DetailRow label="Gender" value={node.person.gender} />
               <DetailRow label="Date of birth" value={null} />
               <DetailRow label="Phone" value={node.person.phone} />
-              <DetailRow label="Card ID" value={node.person.cardId} />
             </dl>
           </section>
 
@@ -471,6 +521,7 @@ function ProfileModal({ graph, node, onClose, onSelectNode }: ProfileModalProps)
 
           <section className="graph-modal-section">
             <h3>Employment</h3>
+            {!hasEmploymentData ? <p className="graph-empty-section-note">No employment data</p> : null}
             <dl className="graph-modal-grid">
               <DetailRow label="Occupation type" value={node.person.occupationType} />
               <DetailRow label="Job title" value={node.person.employment?.jobTitle} />
@@ -535,36 +586,72 @@ function ProfileModal({ graph, node, onClose, onSelectNode }: ProfileModalProps)
           <section className="graph-modal-section">
             <h3>Record Metadata</h3>
             <dl className="graph-modal-grid">
-              <DetailRow label="Record ID" value={node.person.id} />
               <DetailRow label="Profile source" value={node.person.profileSource} />
               <div className="graph-modal-row">
                 <dt>Created date</dt>
                 <dd>{formatDate(node.person.createdAt)}</dd>
               </div>
               <DetailRow label="Last updated" value={null} />
-              <DetailRow label="Uploaded document path" value={node.person.documentPath} />
             </dl>
+            <button
+              type="button"
+              className="graph-tech-toggle"
+              aria-expanded={showTechnicalDetails}
+              onClick={() => setShowTechnicalDetails((current) => !current)}
+            >
+              {showTechnicalDetails ? 'Hide Technical Details' : 'Show Technical Details'}
+            </button>
+            {showTechnicalDetails ? (
+              <dl className="graph-modal-grid graph-tech-grid">
+                <DetailRow label="Card ID" value={node.person.cardId} />
+                <DetailRow label="Record ID" value={node.person.id} />
+                <DetailRow label="Uploaded document path" value={node.person.documentPath} />
+              </dl>
+            ) : null}
           </section>
         </div>
 
         <footer className="graph-modal-footer">
-          <button type="button" className="graph-modal-secondary" onClick={onClose}>
-            Close
+          <button type="button" className="graph-modal-action verify">
+            Verify
           </button>
-          {node.statusBucket === 'in-process' ? (
-            <>
-              <button type="button" className="graph-modal-action approve">
-                Approve
-              </button>
-              <button type="button" className="graph-modal-action reject">
-                Reject
-              </button>
-            </>
-          ) : null}
-          <button type="button" className="graph-modal-action flag">
-            Flag
+          <button type="button" className="graph-modal-action deny" onClick={() => openConfirm('deny')}>
+            Deny
           </button>
         </footer>
+
+        {confirmAction ? (
+          <div className="graph-confirm-layer" role="alertdialog" aria-modal="true" aria-labelledby="graph-confirm-title">
+            <section className="graph-confirm-dialog" ref={confirmRef}>
+              <h3 id="graph-confirm-title">
+                {confirmVerb} this verification?
+              </h3>
+              <p>
+                This will mark {node.person.fullName} as {confirmStatus}.
+              </p>
+              <label>
+                <span>Reason or note</span>
+                <textarea
+                  value={confirmNote}
+                  onChange={(event) => setConfirmNote(event.target.value)}
+                  placeholder="Optional"
+                />
+              </label>
+              <div className="graph-confirm-actions">
+                <button type="button" className="graph-modal-secondary" onClick={closeConfirm}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="graph-modal-action deny"
+                  onClick={confirmVerifierAction}
+                >
+                  {confirmVerb}
+                </button>
+              </div>
+            </section>
+          </div>
+          ) : null}
       </section>
     </div>
   )
@@ -711,21 +798,15 @@ function GraphTab({ graph }: GraphTabProps) {
         </div>
 
         {activeSelectedNode ? (
-          <aside className="graph-inspector" aria-label="Selected person details">
+          <aside
+            className={`graph-inspector ${isProfileModalOpen ? 'modal-open' : ''}`}
+            aria-label="Selected person details"
+          >
             <div className="graph-inspector-head">
               <p className={`graph-status-pill ${activeSelectedNode.statusBucket}`}>
                 {activeSelectedNode.person.verificationStatus.replace('-', ' ')}
               </p>
-              <button
-                type="button"
-                className="graph-close-button"
-                aria-label="Close panel"
-                onClick={closeInspector}
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                  <path d="M18 6 6 18M6 6l12 12" />
-                </svg>
-              </button>
+              <CloseButton ariaLabel="Close panel" className="graph-close-button" onClick={closeInspector} />
             </div>
             <p className="graph-person-name">{activeSelectedNode.person.fullName}</p>
             <button

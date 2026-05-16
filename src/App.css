@@ -215,6 +215,32 @@ th {
   align-items: center;
 }
 
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(95, 216, 255, 0.28) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(95, 216, 255, 0.26);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(95, 216, 255, 0.42);
+  background-clip: padding-box;
+}
+
 .graph-title-group {
   flex: 0 0 auto;
 }
@@ -469,6 +495,11 @@ th {
   animation: graph-sidebar-enter 180ms ease;
 }
 
+.graph-inspector.modal-open {
+  opacity: 0.34;
+  filter: saturate(0.75);
+}
+
 .graph-inspector-head {
   display: block;
   min-height: 2.25rem;
@@ -476,10 +507,7 @@ th {
   padding-right: 2.5rem;
 }
 
-.graph-close-button {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
+.graph-icon-close {
   width: 2rem;
   height: 2rem;
   padding: 0;
@@ -488,16 +516,16 @@ th {
   justify-content: center;
   border: 0;
   background: transparent;
-  color: var(--text-muted);
+  color: #d7edf8;
   box-shadow: none;
 }
 
-.graph-close-button:hover {
+.graph-icon-close:hover {
   background: rgba(255, 255, 255, 0.08);
   color: #f2f2f2;
 }
 
-.graph-close-button svg {
+.graph-icon-close svg {
   width: 1.15rem;
   height: 1.15rem;
   stroke: currentColor;
@@ -505,6 +533,12 @@ th {
   stroke-linecap: round;
   stroke-linejoin: round;
   fill: none;
+}
+
+.graph-close-button {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
 }
 
 .graph-more-button {
@@ -578,12 +612,12 @@ th {
   display: grid;
   place-items: center;
   padding: 1rem;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.5);
 }
 
 .graph-profile-modal {
   position: relative;
-  width: min(640px, 100%);
+  width: min(780px, 100%);
   max-height: 85vh;
   display: flex;
   flex-direction: column;
@@ -595,67 +629,38 @@ th {
 }
 
 .graph-modal-header {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  display: flex;
+  justify-content: space-between;
   gap: 1rem;
   align-items: center;
-  padding: 1.25rem 3.5rem 1rem 1.35rem;
+  padding: 1.15rem 1.35rem;
   border-bottom: 1px solid #2a1010;
 }
 
 .graph-modal-header h2 {
-  margin: 0 0 0.4rem;
+  margin: 0;
   color: #f2f2f2;
   font-size: 1.55rem;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
-.graph-modal-photo {
-  width: 4.5rem;
-  height: 4.5rem;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  border: 1px solid rgba(95, 216, 255, 0.24);
-  border-radius: 50%;
-  background: #121317;
-  color: #d7edf8;
-  font-weight: 800;
+.graph-modal-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.85rem;
+  min-width: 0;
 }
 
-.graph-modal-photo img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.graph-modal-title-row .graph-status-pill {
+  flex: 0 0 auto;
+  margin: 0;
 }
 
 .graph-modal-close {
-  position: absolute;
-  right: 1rem;
-  top: 1rem;
-  width: 2rem;
-  height: 2rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  background: transparent;
-  color: var(--text-muted);
-  box-shadow: none;
-}
-
-.graph-modal-close:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #f2f2f2;
-}
-
-.graph-modal-close svg {
-  width: 1.15rem;
-  height: 1.15rem;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  fill: none;
+  z-index: 3;
+  flex: 0 0 2rem;
 }
 
 .graph-modal-body {
@@ -691,11 +696,22 @@ th {
   letter-spacing: 0.06em;
 }
 
+.graph-modal-row.empty dt,
+.graph-modal-row.empty dd {
+  color: rgba(148, 160, 174, 0.58);
+}
+
 .graph-modal-row dd {
   margin: 0;
   color: #efefef;
   font-weight: 700;
   overflow-wrap: anywhere;
+}
+
+.graph-empty-section-note {
+  margin: 0 0 0.85rem;
+  color: var(--text-muted);
+  font-size: 0.86rem;
 }
 
 .graph-muted-value,
@@ -710,6 +726,7 @@ th {
 }
 
 .graph-trust-row i {
+  position: relative;
   display: block;
   height: 0.45rem;
   overflow: hidden;
@@ -717,11 +734,43 @@ th {
   background: rgba(255, 255, 255, 0.1);
 }
 
+.graph-trust-row i::before,
+.graph-trust-row i::after {
+  content: '';
+  position: absolute;
+  top: -0.18rem;
+  bottom: -0.18rem;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.34);
+}
+
+.graph-trust-row i::before {
+  left: 50%;
+}
+
+.graph-trust-row i::after {
+  left: 75%;
+}
+
 .graph-trust-row b {
+  position: relative;
+  z-index: 1;
   display: block;
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, #ff4c86, #e5b85d 48%, #38d96b);
+}
+
+.graph-tech-toggle {
+  margin-top: 0.85rem;
+  border: 1px solid rgba(95, 216, 255, 0.2);
+  background: transparent;
+  color: var(--text-muted);
+  box-shadow: none;
+}
+
+.graph-tech-grid {
+  margin-top: 0.85rem;
 }
 
 .graph-connection-summary {
@@ -764,21 +813,82 @@ th {
 
 .graph-modal-secondary,
 .graph-modal-action {
+  min-width: 5.8rem;
+  padding: 0.62rem 1rem;
   border: 1px solid rgba(95, 216, 255, 0.24);
   background: #0a1220;
   color: #d7edf8;
+  font-weight: 700;
   box-shadow: none;
 }
 
-.graph-modal-action.approve {
-  border-color: rgba(56, 217, 107, 0.34);
-  color: #c8ffd8;
+.graph-modal-action.verify {
+  border-color: rgba(56, 217, 107, 0.72);
+  background: #207a45;
+  color: #ffffff;
 }
 
-.graph-modal-action.reject,
-.graph-modal-action.flag {
+.graph-modal-action.deny {
   border-color: rgba(255, 76, 134, 0.34);
+  background: rgba(111, 18, 51, 0.42);
   color: #ffd1df;
+}
+
+.graph-confirm-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.44);
+}
+
+.graph-confirm-dialog {
+  width: min(420px, 100%);
+  padding: 1rem;
+  border: 1px solid rgba(95, 216, 255, 0.22);
+  border-radius: 8px;
+  background: #120b0b;
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.52);
+}
+
+.graph-confirm-dialog h3 {
+  margin-bottom: 0.5rem;
+}
+
+.graph-confirm-dialog p {
+  margin: 0 0 0.9rem;
+  color: var(--text-muted);
+}
+
+.graph-confirm-dialog label {
+  display: grid;
+  gap: 0.4rem;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.graph-confirm-dialog textarea {
+  min-height: 5.5rem;
+  resize: vertical;
+  border: 1px solid #2a1010;
+  border-radius: 6px;
+  background: #0a0808;
+  color: #efefef;
+  padding: 0.65rem;
+  font: inherit;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.graph-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  margin-top: 0.9rem;
 }
 
 @keyframes graph-sidebar-enter {
@@ -1216,8 +1326,7 @@ button.deny {
   }
 
   .graph-modal-header {
-    grid-template-columns: auto minmax(0, 1fr);
-    padding-right: 3.5rem;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .graph-modal-grid {
