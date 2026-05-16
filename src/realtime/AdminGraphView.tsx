@@ -1,38 +1,25 @@
 import { useEffect, useState } from 'react'
 import GraphTab from '../components/GraphTab'
-import type { RecordEntry } from '../lib/graphData'
+import type { GraphPayload } from '../lib/graphData'
 import AdminLayout from './AdminLayout'
 
-type SubmissionSummary = {
-  name: string
-  occupation: string
-  address?: string
-  decision: 'pending' | 'verified' | 'invalid'
-}
-
 export default function AdminGraphView() {
-  const [rows, setRows] = useState<RecordEntry[]>([])
+  const [graph, setGraph] = useState<GraphPayload | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
-    fetch('/api/admin/submissions')
+    fetch('/api/admin/graph')
       .then((res) => res.json())
-      .then((json: { ok: boolean; submissions?: SubmissionSummary[]; error?: string }) => {
+      .then((json: { ok: boolean; graph?: GraphPayload; error?: string }) => {
         if (!active) {
           return
         }
         if (!json.ok) {
-          throw new Error(json.error ?? 'Failed to load submissions')
+          throw new Error(json.error ?? 'Failed to load graph')
         }
-        const list = (json.submissions ?? []).map((row) => ({
-          name: row.name,
-          role: row.occupation,
-          district: row.address?.trim() ? row.address : '???',
-          status: row.decision === 'verified' ? 'Verified' : row.decision === 'pending' ? 'Missing' : 'Corrupted',
-        } satisfies RecordEntry))
-        setRows(list)
+        setGraph(json.graph ?? { nodes: [], edges: [] })
       })
       .catch((cause: unknown) => {
         if (active) {
@@ -53,7 +40,6 @@ export default function AdminGraphView() {
   return (
     <AdminLayout active="graph">
       <section className="admin-page-shell">
-        <div className="admin-breadcrumbs">Dashboard &gt; Graph</div>
         <header className="admin-page-head">
           <h1>Graph</h1>
         </header>
@@ -67,8 +53,9 @@ export default function AdminGraphView() {
           <p className="tagline">{error}</p>
         </article>
       ) : (
-        <GraphTab database={rows} />
+        <GraphTab graph={graph ?? { nodes: [], edges: [] }} />
       )}
     </AdminLayout>
   )
 }
+

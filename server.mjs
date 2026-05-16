@@ -20,6 +20,7 @@ const dataDir = path.join(__dirname, 'data')
 const uploadsDir = path.join(__dirname, 'uploads')
 const recordsDbPath = path.join(dataDir, 'records.db')
 let recordsDb = null
+let SQL = null
 
 function createServerId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -120,9 +121,11 @@ async function initRecordsDb() {
   await fs.mkdir(dataDir, { recursive: true })
   await fs.mkdir(uploadsDir, { recursive: true })
 
-  const SQL = await initSqlJs({
-    locateFile: (file) => path.join(__dirname, 'node_modules', 'sql.js', 'dist', file),
-  })
+  if (!SQL) {
+    SQL = await initSqlJs({
+      locateFile: (file) => path.join(__dirname, 'node_modules', 'sql.js', 'dist', file),
+    })
+  }
 
   let bytes = null
   try {
@@ -134,6 +137,147 @@ async function initRecordsDb() {
   recordsDb = bytes ? new SQL.Database(new Uint8Array(bytes)) : new SQL.Database()
 
   await persistRecordsDb()
+}
+
+function mapGraphStatus(status) {
+  if (status === 'verified') {
+    return 'verified'
+  }
+
+  if (status === 'pending') {
+    return 'in-process'
+  }
+
+  return 'not-verified'
+}
+
+function splitName(name) {
+  const parts = String(name ?? '').trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) {
+    return { firstName: 'Unknown', lastName: 'Citizen' }
+  }
+  if (parts.length === 1) {
+    return { firstName: parts[0], lastName: '' }
+  }
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(' '),
+  }
+}
+
+function splitAddress(address) {
+  const parts = String(address ?? '').split(',').map((part) => part.trim()).filter(Boolean)
+  return {
+    street: parts[0] ?? '',
+    city: parts[1] ?? '',
+    country: parts.slice(2).join(', '),
+  }
+}
+
+function initials(firstName, lastName) {
+  const first = firstName.charAt(0).toUpperCase() || '?'
+  const last = lastName.charAt(0).toUpperCase() || first
+  return `${first}.${last}`
+}
+
+function loadRecordsGraph() {
+  const citizenResult = recordsDb.exec(`
+    SELECT
+      c.id,
+      c.card_id,
+      c.name,
+      c.phone,
+      c.age,
+      c.gender,
+      c.address,
+      c.occupation,
+      c.verification_status,
+      c.trust_score,
+      c.created_at,
+      ed.job_title,
+      ed.employer,
+      ed.work_address,
+      sd.institution,
+      sd.student_id,
+      sd.field_of_study,
+      sd.year_of_study,
+      rd.former_occupation
+    FROM citizens c
+    LEFT JOIN employment_details ed ON ed.citizen_id = c.id
+    LEFT JOIN student_details sd ON sd.citizen_id = c.id
+    LEFT JOIN retired_details rd ON rd.citizen_id = c.id
+    ORDER BY c.name COLLATE NOCASE, c.card_id COLLATE NOCASE;
+  `)
+
+  const edgeResult = recordsDb.exec(`
+    SELECT citizen_a_id, citizen_b_id, relationship, strength
+    FROM connections
+    ORDER BY strength DESC, citizen_a_id, citizen_b_id;
+  `)
+
+  const nodes = (citizenResult[0]?.values ?? []).map((row) => {
+    const name = String(row[2] ?? '').trim() || String(row[1])
+    const { firstName, lastName } = splitName(name)
+    const { street, city, country } = splitAddress(row[6])
+    const verificationStatus = String(row[8])
+    const label = initials(firstName, lastName)
+
+    return {
+      id: String(row[0]),
+      label,
+      shortLabel: label,
+      statusBucket: mapGraphStatus(verificationStatus),
+      person: {
+        id: String(row[0]),
+        firstName,
+        lastName,
+        fullName: name,
+        age: row[4] == null ? null : Number(row[4]),
+        gender: row[5] == null ? '' : String(row[5]),
+        photoUrl: '/images/profile-placeholder.png',
+        street,
+        city,
+        country,
+        occupationType: String(row[7] ?? ''),
+        verificationStatus,
+        trustScore: Number(row[9] ?? 0),
+        createdAt: String(row[10] ?? ''),
+        employment: row[11]
+          ? {
+              jobTitle: String(row[11]),
+              employer: String(row[12]),
+              workAddress: String(row[13]),
+            }
+          : null,
+        student: row[14]
+          ? {
+              institution: String(row[14]),
+              studentId: String(row[15]),
+              fieldOfStudy: String(row[16]),
+              yearOfStudy: Number(row[17]),
+            }
+          : null,
+        retired: row[18]
+          ? {
+              formerOccupation: String(row[18]),
+            }
+          : null,
+      },
+    }
+  })
+
+  const edges = (edgeResult[0]?.values ?? []).map((row) => ({
+    id: `${String(row[0])}--${String(row[1])}`,
+    source: String(row[0]),
+    target: String(row[1]),
+    weight: Number(row[3]),
+    relationship: String(row[2]),
+    strength: Number(row[3]),
+    overlapScore: Number(row[3]) * 10,
+    overlapSummary: `${String(row[2])} (${String(row[3])}/10)`,
+  }))
+
+  return { nodes, edges }
 }
 
 const storage = multer.diskStorage({
@@ -279,6 +423,19 @@ app.get('/api/admin/submissions', async (_req, res) => {
     res.json({ ok: true, submissions })
   } catch (cause) {
     res.status(500).json({ ok: false, error: cause instanceof Error ? cause.message : 'Failed to list submissions' })
+  }
+})
+
+app.get('/api/admin/graph', async (_req, res) => {
+  try {
+    if (!recordsDb) {
+      res.status(500).json({ ok: false, error: 'Records DB not initialized' })
+      return
+    }
+
+    res.json({ ok: true, graph: loadRecordsGraph() })
+  } catch (cause) {
+    res.status(500).json({ ok: false, error: cause instanceof Error ? cause.message : 'Failed to load graph' })
   }
 })
 
