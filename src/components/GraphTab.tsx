@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import cytoscape from 'cytoscape'
 import type { RecordEntry } from './DatabaseTab'
-import { buildGraphFromRecords } from '../lib/graphData'
+import { buildGraphFromRecords, type GraphNodeData } from '../lib/graphData'
 
 type GraphTabProps = {
   database: RecordEntry[]
@@ -10,6 +10,11 @@ type GraphTabProps = {
 function GraphTab({ database }: GraphTabProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const { nodes, edges } = useMemo(() => buildGraphFromRecords(database), [database])
+  const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(nodes[0] ?? null)
+
+  useEffect(() => {
+    setSelectedNode((current) => current ?? nodes[0] ?? null)
+  }, [nodes])
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -29,25 +34,28 @@ function GraphTab({ database }: GraphTabProps) {
       layout: {
         name: 'cose',
         animate: false,
-        padding: 28,
+        padding: 36,
+        nodeRepulsion: 900000,
+        idealEdgeLength: 180,
       },
       style: [
         {
           selector: 'node',
           style: {
-            label: 'data(label)',
+            label: 'data(shortLabel)',
             color: '#f0f0f0',
             'font-family': 'JetBrains Mono, Consolas, Courier New, monospace',
-            'font-size': '10',
-            'text-wrap': 'wrap',
-            'text-max-width': '96',
+            'font-size': '14',
+            'font-weight': '700',
             'text-valign': 'center',
             'text-halign': 'center',
             'background-color': '#dfb463',
-            'border-width': '2',
-            'border-color': '#1a0a0a',
-            width: '56',
-            height: '56',
+            'border-width': '3',
+            'border-color': '#130707',
+            width: '82',
+            height: '82',
+            'text-outline-width': '1',
+            'text-outline-color': '#130707',
           },
         },
         {
@@ -69,18 +77,32 @@ function GraphTab({ database }: GraphTabProps) {
           },
         },
         {
+          selector: 'node:selected',
+          style: {
+            'overlay-opacity': 0,
+            'border-color': '#f2f2f2',
+            'border-width': '4',
+          },
+        },
+        {
           selector: 'edge',
           style: {
             width: (element: cytoscape.EdgeSingular) => {
               const weight = element.data('weight') as number
-              return 1.5 + (weight - 1) * 1.8
+              return 1.5 + (weight / 100) * 10
             },
-            'line-color': '#7d1111',
-            opacity: 0.8,
+            'line-color': '#8d8d8d',
+            opacity: 0.75,
             'curve-style': 'bezier',
           },
         },
-      ],
+      ] as any,
+    })
+
+    graph.on('tap', 'node', (event) => {
+      const data = event.target.data() as GraphNodeData
+      const matched = nodes.find((node) => node.id === data.id) ?? null
+      setSelectedNode(matched)
     })
 
     return () => {
@@ -93,9 +115,7 @@ function GraphTab({ database }: GraphTabProps) {
       <div className="graph-header">
         <div>
           <h2>People Graph</h2>
-          <p className="tagline">
-            Nodes come from the recovered records. Links are inferred from shared district or shared role.
-          </p>
+          <p className="tagline">Each person is one node. Labels use `F.L`, and thicker lines mean more overlap.</p>
         </div>
         <div className="graph-legend" aria-label="Graph legend">
           <span className="legend-item">
@@ -113,18 +133,46 @@ function GraphTab({ database }: GraphTabProps) {
         </div>
       </div>
 
-      <div ref={containerRef} className="graph-canvas" />
+      <div className="graph-layout">
+        <div ref={containerRef} className="graph-canvas" />
+
+        <aside className="graph-inspector" aria-label="Selected person details">
+          {selectedNode ? (
+            <>
+              <p className={`graph-status-pill ${selectedNode.statusBucket}`}>{selectedNode.person.graphStatus}</p>
+              <h3 className="graph-person-code">{selectedNode.shortLabel}</h3>
+              <p className="graph-person-name">{selectedNode.person.name}</p>
+
+              <dl className="graph-person-meta">
+                <div>
+                  <dt>Role</dt>
+                  <dd>{selectedNode.person.role}</dd>
+                </div>
+                <div>
+                  <dt>District</dt>
+                  <dd>{selectedNode.person.district}</dd>
+                </div>
+                <div>
+                  <dt>Database Status</dt>
+                  <dd>{selectedNode.person.status}</dd>
+                </div>
+              </dl>
+            </>
+          ) : (
+            <p className="tagline">Select a node to inspect the person object.</p>
+          )}
+        </aside>
+      </div>
 
       <div className="graph-notes">
         <p>
-          <span>Node rule</span> Person name from the database.
+          <span>Node</span> Every person is stored as one object with `name`, `role`, `district`, and `status`.
         </p>
         <p>
-          <span>Color rule</span> `Verified` and `Trusted` map to green, `Missing` and `Unverified` map to yellow,
-          `Corrupted` maps to red.
+          <span>Label</span> Names are shortened to `F.L`.
         </p>
         <p>
-          <span>Edge rule</span> Thicker lines mean stronger inferred overlap in the current records.
+          <span>Connection</span> Line thickness grows when role, district, or status overlap more strongly.
         </p>
       </div>
     </article>

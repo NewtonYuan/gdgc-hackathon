@@ -257,6 +257,79 @@ th {
     #0c0808;
 }
 
+.graph-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.graph-inspector {
+  border: 2px solid #2a1010;
+  background: linear-gradient(180deg, rgba(161, 22, 22, 0.09), transparent 30%), #0d0808;
+  padding: 1rem;
+}
+
+.graph-status-pill {
+  display: inline-block;
+  margin: 0 0 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #2a1010;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.graph-status-pill.verified {
+  color: #7bc87b;
+  border-color: #2f9f49;
+}
+
+.graph-status-pill.in-process {
+  color: #dfb463;
+  border-color: #dfb463;
+}
+
+.graph-status-pill.not-verified {
+  color: #ff8a8a;
+  border-color: #e12b2b;
+}
+
+.graph-person-code {
+  margin: 0 0 0.25rem;
+  font-size: 1.7rem;
+  color: #f2f2f2;
+}
+
+.graph-person-name {
+  margin: 0 0 1rem;
+  color: var(--text-muted);
+}
+
+.graph-person-meta {
+  margin: 0;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.graph-person-meta div {
+  padding-top: 0.75rem;
+  border-top: 1px solid #2a1010;
+}
+
+.graph-person-meta dt {
+  margin-bottom: 0.2rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.graph-person-meta dd {
+  margin: 0;
+  color: #efefef;
+}
+
 .graph-notes {
   margin-top: 1rem;
   display: grid;
@@ -654,6 +727,10 @@ button.deny {
   }
 
   .graph-notes {
+    grid-template-columns: 1fr;
+  }
+
+  .graph-layout {
     grid-template-columns: 1fr;
   }
 }
