@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 import DatabaseTab, { type RecordEntry } from './components/DatabaseTab'
-import NpcTab from './components/NpcTab'
+import NpcTab, { type RelatedRecord } from './components/NpcTab'
 import { fetchRecords } from './lib/sqlite'
 
 const incomingClaim = {
@@ -44,6 +44,42 @@ function App() {
       active = false
     }
   }, [])
+
+  // Logic for matching algo
+  const relatedRecords = useMemo((): RelatedRecord[] => {
+    const npcRole = incomingClaim.role.toLowerCase()
+    const npcDistrict = incomingClaim.district.toLowerCase()
+    const npcNameParts = incomingClaim.name.toLowerCase().split(' ')
+
+    return database
+      .filter((entry) => entry.name !== incomingClaim.name)
+      .map((entry) => {
+        let score = 0
+        const matchedFields: string[] = []
+
+        if (entry.district !== '???' && entry.district.toLowerCase() === npcDistrict) {
+          score += 3
+          matchedFields.push(`Same district: ${entry.district}`)
+        }
+
+        const entryRole = entry.role.toLowerCase()
+        if (entryRole.includes(npcRole) || npcRole.includes(entryRole)) {
+          score += 2
+          matchedFields.push(`Role overlap: ${entry.role}`)
+        }
+
+        const entryNameParts = entry.name.toLowerCase().split(' ')
+        const sharedParts = npcNameParts.filter((p) => entryNameParts.includes(p))
+        if (sharedParts.length > 0) {
+          score += 1
+          matchedFields.push(`Name fragment: ${sharedParts.join(', ')}`)
+        }
+
+        return { entry, score, matchedFields }
+      })
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score)
+  }, [database])
 
   const analysis = useMemo(() => {
     const match = database.find((entry) => entry.name === incomingClaim.name)
@@ -118,7 +154,7 @@ function App() {
       ) : activeTab === 'database' ? (
         <DatabaseTab database={database} />
       ) : (
-        <NpcTab incomingClaim={incomingClaim} decision={decision} setDecision={setDecision} analysis={analysis} />
+        <NpcTab incomingClaim={incomingClaim} decision={decision} setDecision={setDecision} analysis={analysis} relatedRecords={relatedRecords} />
       )}
     </main>
   )

@@ -6,6 +6,9 @@ const seedRows: RecordEntry[] = [
   { name: 'Sarah Chen', role: 'Nurse', district: 'Sector 4', status: 'Verified' },
   { name: 'Marcus Hale', role: 'Engineer', district: 'Sector 2', status: 'Missing' },
   { name: 'Lina Torres', role: 'Security', district: '???', status: 'Corrupted' },
+  { name: 'James Rowe', role: 'Engineer', district: 'Sector 2', status: 'Verified' },
+  { name: 'Owen Liu', role: 'Security', district: 'Sector 2', status: 'Missing' },
+  { name: 'Petra Hale', role: 'Medic', district: 'Sector 3', status: 'Verified' },
 ]
 
 let sqlJs: SqlJsStatic | null = null

@@ -135,6 +135,9 @@ The game explores:
 - Society after digital collapse
 - Human verification replacing centralized systems
 
+Feature to implement:
+- When a new NPC arrives, it also shows the people from the database that show the best match. (e.g. they could be at the same place and department at work or live on the same street).
+
 ---
 
 ## Running Locally
