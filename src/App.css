@@ -394,6 +394,60 @@ th {
   grid-template-columns: minmax(0, 1fr) 280px;
 }
 
+.graph-visibility-panel {
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(95, 216, 255, 0.18);
+  background: rgba(7, 18, 34, 0.64);
+  box-shadow: inset 0 0 18px rgba(95, 216, 255, 0.05);
+}
+
+.graph-visibility-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  margin-top: 0.8rem;
+}
+
+.graph-visibility-count {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.graph-restore-button,
+.graph-hidden-chip,
+.graph-hide-button {
+  border: 1px solid rgba(95, 216, 255, 0.24);
+  background: #0a1220;
+  color: #d7edf8;
+  box-shadow: none;
+}
+
+.graph-restore-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.graph-hidden-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.8rem;
+}
+
+.graph-hidden-chip {
+  padding: 0.38rem 0.65rem;
+  font-size: 0.78rem;
+}
+
+.graph-hide-button {
+  padding: 0.45rem 0.7rem;
+  font-size: 0.78rem;
+}
+
 .graph-inspector {
   border: 2px solid #2a1010;
   background: linear-gradient(180deg, rgba(161, 22, 22, 0.09), transparent 30%), #0d0808;
@@ -880,6 +934,10 @@ button.deny {
 
   .graph-layout.sidebar-open {
     grid-template-columns: 1fr;
+  }
+
+  .graph-visibility-actions {
+    align-items: flex-start;
   }
 }
 .phone-screen {

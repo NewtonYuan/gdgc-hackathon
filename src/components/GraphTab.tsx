@@ -1,6 +1,6 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { Line, OrbitControls, Stars, Text } from '@react-three/drei'
+import { Billboard, Line, OrbitControls, Stars, Text } from '@react-three/drei'
 import * as THREE from 'three'
 import type { GraphNodeData, GraphPayload } from '../lib/graphData'
 
@@ -41,17 +41,29 @@ function seededValue(seed: string, index: number) {
 }
 
 function buildNodePositions(nodes: GraphNodeData[]): PositionedNode[] {
+  const rankedNodes = [...nodes].sort((left, right) => right.person.trustScore - left.person.trustScore)
+  const shellCapacity = 10
   const goldenAngle = Math.PI * (3 - Math.sqrt(5))
 
-  return nodes.map((node, index) => {
-    const layer = index % 3
-    const angle = index * goldenAngle
-    const radius = 2.5 + layer * 1.15 + Math.floor(index / 3) * 0.15
-    const y = (layer - 1) * 1.05 + Math.sin(index * 1.8) * 0.38
+  return rankedNodes.map((node, index) => {
+    const shellIndex = Math.floor(index / shellCapacity)
+    const shellStart = shellIndex * shellCapacity
+    const shellNodes = rankedNodes.slice(shellStart, shellStart + shellCapacity)
+    const localIndex = index - shellStart
+    const shellCount = shellNodes.length
+    const radius = 2.8 + shellIndex * 1.9 + seededValue(node.id, 77) * 0.18
+    const shellRotation = seededValue(`shell-${shellIndex}`, 3) * Math.PI * 2
+
+    const yUnit = shellCount === 1 ? 0 : 1 - (localIndex / (shellCount - 1)) * 2
+    const ringRadius = Math.sqrt(Math.max(0, 1 - yUnit * yUnit))
+    const theta = localIndex * goldenAngle + shellRotation
+    const x = Math.cos(theta) * ringRadius * radius
+    const y = yUnit * radius
+    const z = Math.sin(theta) * ringRadius * radius
 
     return {
       ...node,
-      position: [Math.cos(angle) * radius, y, Math.sin(angle) * radius],
+      position: [x, y, z],
     }
   })
 }
@@ -74,7 +86,9 @@ type SpaceNodeProps = {
 
 function SpaceNode({ node, onSelect }: SpaceNodeProps) {
   const bodyRef = useRef<THREE.Group>(null)
-  const meshRef = useRef<THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>>(null)
+  const coreRef = useRef<THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>>(null)
+  const haloInnerRef = useRef<THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>>(null)
+  const haloOuterRef = useRef<THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>>(null)
   const sparkMaterialRef = useRef<THREE.PointsMaterial>(null)
   const sparkRef = useRef<THREE.Points>(null)
   const statusStyle = STATUS_STYLES[node.statusBucket]
@@ -103,14 +117,21 @@ function SpaceNode({ node, onSelect }: SpaceNodeProps) {
     const pulse = 1 + Math.sin(state.clock.elapsedTime * 2.3 + node.position[2]) * 0.12
 
     if (bodyRef.current) {
-      bodyRef.current.rotation.y = state.clock.elapsedTime * 0.28
-      bodyRef.current.rotation.x = Math.sin(state.clock.elapsedTime * 0.42 + node.position[0]) * 0.08
+      bodyRef.current.rotation.z = state.clock.elapsedTime * 0.12
       bodyRef.current.scale.setScalar(pulse)
       bodyRef.current.position.y = Math.sin(state.clock.elapsedTime + node.position[0]) * 0.05
     }
 
-    if (meshRef.current) {
-      meshRef.current.material.emissiveIntensity = 0.75 + pulse * 0.42
+    if (coreRef.current) {
+      coreRef.current.material.opacity = 0.9 + Math.sin(state.clock.elapsedTime * 2.8 + node.position[1]) * 0.08
+    }
+
+    if (haloInnerRef.current) {
+      haloInnerRef.current.material.opacity = 0.24 + Math.sin(state.clock.elapsedTime * 2.1 + node.position[0]) * 0.05
+    }
+
+    if (haloOuterRef.current) {
+      haloOuterRef.current.material.opacity = 0.12 + Math.sin(state.clock.elapsedTime * 1.7 + node.position[2]) * 0.04
     }
 
     if (sparkMaterialRef.current) {
@@ -127,41 +148,62 @@ function SpaceNode({ node, onSelect }: SpaceNodeProps) {
           onSelect(node)
         }}
       >
-        <mesh ref={meshRef}>
-          <sphereGeometry args={[0.34, 48, 48]} />
-          <meshStandardMaterial
+        <mesh ref={haloOuterRef}>
+          <sphereGeometry args={[0.62, 36, 36]} />
+          <meshBasicMaterial
             color={statusStyle.color}
-            emissive={statusStyle.emissive}
-            emissiveIntensity={1.05}
-            roughness={0.34}
-            metalness={0.12}
+            transparent
+            opacity={0.14}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+          />
+        </mesh>
+        <mesh ref={haloInnerRef}>
+          <sphereGeometry args={[0.46, 36, 36]} />
+          <meshBasicMaterial
+            color={statusStyle.color}
+            transparent
+            opacity={0.26}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+          />
+        </mesh>
+        <mesh ref={coreRef}>
+          <sphereGeometry args={[0.12, 32, 32]} />
+          <meshBasicMaterial
+            color={statusStyle.color}
+            transparent
+            opacity={0.95}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
           />
         </mesh>
         <points ref={sparkRef} geometry={sparkGeometry}>
           <pointsMaterial
             ref={sparkMaterialRef}
-            color="#fff6d2"
-            size={0.022}
+            color={statusStyle.label}
+            size={0.018}
             transparent
-            opacity={0.62}
+            opacity={0.5}
             blending={THREE.AdditiveBlending}
             depthWrite={false}
             sizeAttenuation
           />
         </points>
       </group>
-      <Text
-        position={[0, -0.72, 0]}
-        fontSize={0.14}
-        maxWidth={2.3}
-        anchorX="center"
-        anchorY="middle"
-        color={statusStyle.label}
-        outlineWidth={0.018}
-        outlineColor="#020612"
-      >
-        {node.person.fullName}
-      </Text>
+      <Billboard position={[0, -0.72, 0]} follow lockX={false} lockY={false} lockZ={false}>
+        <Text
+          fontSize={0.14}
+          maxWidth={2.3}
+          anchorX="center"
+          anchorY="middle"
+          color={statusStyle.label}
+          outlineWidth={0.018}
+          outlineColor="#020612"
+        >
+          {node.person.fullName}
+        </Text>
+      </Billboard>
     </group>
   )
 }
@@ -187,7 +229,7 @@ function GraphScene({ graph, onSelectNode }: GraphSceneProps) {
       <pointLight position={[-4, -2, -3]} intensity={18} color="#ff4c86" />
       <Stars radius={80} depth={48} count={1800} factor={3.4} saturation={0.35} fade speed={0.25} />
 
-      <group rotation={[0.12, 0, 0]}>
+      <group>
         {edges.map((edge) => {
           const source = positionById.get(edge.source)
           const target = positionById.get(edge.target)
@@ -219,10 +261,10 @@ function GraphScene({ graph, onSelectNode }: GraphSceneProps) {
         enableDamping
         dampingFactor={0.08}
         target={[0, 0, 0]}
-        minDistance={4.2}
-        maxDistance={11}
+        minDistance={5.2}
+        maxDistance={15}
         autoRotate
-        autoRotateSpeed={0.35}
+        autoRotateSpeed={0.3}
       />
     </>
   )
@@ -230,11 +272,38 @@ function GraphScene({ graph, onSelectNode }: GraphSceneProps) {
 
 function GraphTab({ graph }: GraphTabProps) {
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null)
+  const [hiddenNodeIds, setHiddenNodeIds] = useState<string[]>([])
+  const visibleGraph = useMemo(() => {
+    const hiddenSet = new Set(hiddenNodeIds)
+
+    return {
+      nodes: graph.nodes.filter((node) => !hiddenSet.has(node.id)),
+      edges: graph.edges.filter((edge) => !hiddenSet.has(edge.source) && !hiddenSet.has(edge.target)),
+    }
+  }, [graph, hiddenNodeIds])
   const databaseSignature = useMemo(
     () =>
-      `${graph.nodes.map((node) => `${node.id}:${node.person.verificationStatus}:${node.person.trustScore}`).join('|')}::${graph.edges.map((edge) => `${edge.source}:${edge.target}:${edge.strength}`).join('|')}`,
-    [graph],
+      `${visibleGraph.nodes.map((node) => `${node.id}:${node.person.verificationStatus}:${node.person.trustScore}`).join('|')}::${visibleGraph.edges.map((edge) => `${edge.source}:${edge.target}:${edge.strength}`).join('|')}`,
+    [visibleGraph],
   )
+  const hiddenNodes = useMemo(
+    () => graph.nodes.filter((node) => hiddenNodeIds.includes(node.id)),
+    [graph.nodes, hiddenNodeIds],
+  )
+
+  useEffect(() => {
+    if (selectedNode && hiddenNodeIds.includes(selectedNode.id)) {
+      setSelectedNode(null)
+    }
+  }, [hiddenNodeIds, selectedNode])
+
+  function hideNode(nodeId: string) {
+    setHiddenNodeIds((current) => (current.includes(nodeId) ? current : [...current, nodeId]))
+  }
+
+  function showNode(nodeId: string) {
+    setHiddenNodeIds((current) => current.filter((id) => id !== nodeId))
+  }
 
   return (
     <article className="panel" role="tabpanel" aria-label="Relationship graph panel">
@@ -261,6 +330,39 @@ function GraphTab({ graph }: GraphTabProps) {
         </div>
       </div>
 
+      <section className="graph-visibility-panel" aria-label="Node visibility controls">
+        <div>
+          <h3>Visibility Controls</h3>
+          <p className="tagline">Hide nodes you do not want to inspect right now. Their connections disappear too.</p>
+        </div>
+        <div className="graph-visibility-actions">
+          <span className="graph-visibility-count">{visibleGraph.nodes.length} visible</span>
+          <span className="graph-visibility-count">{hiddenNodes.length} hidden</span>
+          <button
+            type="button"
+            className="graph-restore-button"
+            onClick={() => setHiddenNodeIds([])}
+            disabled={hiddenNodes.length === 0}
+          >
+            Show All
+          </button>
+        </div>
+        {hiddenNodes.length > 0 ? (
+          <div className="graph-hidden-list">
+            {hiddenNodes.map((node) => (
+              <button
+                key={node.id}
+                type="button"
+                className="graph-hidden-chip"
+                onClick={() => showNode(node.id)}
+              >
+                {node.person.fullName}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </section>
+
       <div className={`graph-layout ${selectedNode ? 'sidebar-open' : ''}`}>
         <div className="graph-stage star-map" aria-label="Recovered people graph visualization">
           <Canvas
@@ -269,7 +371,7 @@ function GraphTab({ graph }: GraphTabProps) {
             style={{ width: '100%', height: '100%' }}
             onPointerMissed={() => setSelectedNode(null)}
           >
-            <GraphScene key={databaseSignature} graph={graph} onSelectNode={setSelectedNode} />
+            <GraphScene key={databaseSignature} graph={visibleGraph} onSelectNode={setSelectedNode} />
           </Canvas>
         </div>
 
@@ -333,6 +435,14 @@ function GraphTab({ graph }: GraphTabProps) {
                 </div>
               ) : null}
               <div>
+                <dt>Visibility</dt>
+                <dd>
+                  <button type="button" className="graph-hide-button" onClick={() => hideNode(selectedNode.id)}>
+                    Hide This Node
+                  </button>
+                </dd>
+              </div>
+              <div>
                 <dt>Database Object</dt>
                 <dd>{JSON.stringify(selectedNode.person)}</dd>
               </div>
@@ -353,6 +463,9 @@ function GraphTab({ graph }: GraphTabProps) {
         </p>
         <p>
           <span>Inspector rule</span> Click a node to open the sidebar. Click empty space to close it.
+        </p>
+        <p>
+          <span>Visibility rule</span> Hidden nodes and their connected lines are removed until you restore them.
         </p>
       </div>
     </article>
