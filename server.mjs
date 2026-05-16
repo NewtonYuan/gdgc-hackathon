@@ -629,10 +629,17 @@ app.get('/api/admin/submissions/:id', async (req, res) => {
     }
 
     const stmt = recordsDb.prepare(
-      `SELECT id, name, phone, occupation, address, card_id, card_payload,
-              document_path, created_at, verification_status, decided_at
-       FROM citizens
-       WHERE id = ?
+      `SELECT c.id, c.name, c.phone, c.occupation, c.address, c.card_id, c.card_payload,
+              c.document_path, c.created_at, c.verification_status, c.decided_at,
+              c.age, c.gender, c.trust_score,
+              ed.job_title, ed.employer, ed.work_address,
+              sd.institution, sd.student_id, sd.field_of_study, sd.year_of_study,
+              rd.former_occupation
+       FROM citizens c
+       LEFT JOIN employment_details ed ON ed.citizen_id = c.id
+       LEFT JOIN student_details sd ON sd.citizen_id = c.id
+       LEFT JOIN retired_details rd ON rd.citizen_id = c.id
+       WHERE c.id = ?
        LIMIT 1;`,
     )
     stmt.bind([String(req.params.id)])
@@ -643,7 +650,32 @@ app.get('/api/admin/submissions/:id', async (req, res) => {
     }
     const row = stmt.get()
     stmt.free()
-    const submission = mapSubmissionRow(row)
+    const submission = {
+      ...mapSubmissionRow(row),
+      age: row[11] == null ? null : Number(row[11]),
+      gender: row[12] == null ? null : String(row[12]),
+      trustScore: Number(row[13] ?? 0),
+      employment: row[14]
+        ? {
+            jobTitle: String(row[14]),
+            employer: String(row[15] ?? ''),
+            workAddress: String(row[16] ?? ''),
+          }
+        : null,
+      student: row[17]
+        ? {
+            institution: String(row[17]),
+            studentId: String(row[18] ?? ''),
+            fieldOfStudy: String(row[19] ?? ''),
+            yearOfStudy: row[20] == null ? null : Number(row[20]),
+          }
+        : null,
+      retired: row[21]
+        ? {
+            formerOccupation: String(row[21]),
+          }
+        : null,
+    }
     res.json({ ok: true, submission })
   } catch (cause) {
     res.status(500).json({ ok: false, error: cause instanceof Error ? cause.message : 'Failed to load submission' })

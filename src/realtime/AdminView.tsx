@@ -16,6 +16,23 @@ type SubmissionDetail = SubmissionSummary & {
   cardPayload: string;
   documentPath: string | null;
   decidedAt: string | null;
+  age: number | null;
+  gender: string | null;
+  trustScore: number;
+  employment: {
+    jobTitle: string;
+    employer: string;
+    workAddress: string;
+  } | null;
+  student: {
+    institution: string;
+    studentId: string;
+    fieldOfStudy: string;
+    yearOfStudy: number | null;
+  } | null;
+  retired: {
+    formerOccupation: string;
+  } | null;
 };
 
 type ProfileConnection = {
@@ -74,7 +91,6 @@ export default function AdminView() {
   const [detail, setDetail] = useState<SubmissionDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [connectionsLoading, setConnectionsLoading] = useState(false);
   const [connections, setConnections] = useState<ProfileConnections>({
     autoLinked: [],
     suggested: [],
@@ -172,7 +188,6 @@ export default function AdminView() {
     }
 
     let active = true;
-    setConnectionsLoading(true);
     setConnectionsError(null);
 
     fetchJsonOrThrow<{
@@ -208,11 +223,6 @@ export default function AdminView() {
               ? cause.message
               : "Failed to load connections",
           );
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setConnectionsLoading(false);
         }
       });
 
@@ -281,40 +291,6 @@ export default function AdminView() {
     }
   };
 
-  const refreshConnections = async () => {
-    if (!detail) {
-      return;
-    }
-
-    setConnectionsLoading(true);
-    setConnectionsError(null);
-    try {
-      const rediscover = await fetchJsonOrThrow<{ ok: boolean; error?: string }>(
-        `/api/profiles/${encodeURIComponent(detail.id)}/rediscover`,
-        { method: "POST" },
-      );
-      if (!rediscover.ok) {
-        throw new Error(rediscover.error ?? "Failed to rediscover connections");
-      }
-
-      const json = await fetchJsonOrThrow<{
-        ok: boolean;
-        connections?: ProfileConnections;
-        error?: string;
-      }>(`/api/profiles/${encodeURIComponent(detail.id)}/connections`);
-      if (!json.ok || !json.connections) {
-        throw new Error(json.error ?? "Failed to load connections");
-      }
-      setConnections(json.connections);
-    } catch (cause) {
-      setConnectionsError(
-        cause instanceof Error ? cause.message : "Failed to refresh connections",
-      );
-    } finally {
-      setConnectionsLoading(false);
-    }
-  };
-
   const stats = {
     total: rows.length,
     pending: rows.filter((r) => r.decision === "pending").length,
@@ -378,9 +354,9 @@ export default function AdminView() {
   return (
     <AdminLayout active="submissions" breadcrumbExtra={selectedName}>
       <section className="admin-page-shell">
-        <section className="admin-header-grid">
+        <section className={`admin-header-grid ${detail ? "submission-detail-header-grid" : ""}`}>
           <div className="admin-header-left">
-            <header className="admin-page-head border-0 flex w-full max-w-[920px] items-center justify-between gap-4">
+            <header className="admin-page-head submission-detail-heading border-0 flex items-center justify-between gap-4">
               <h1 className="text-4xl">{submissionsTitle}</h1>
               {detail ? (
                 <button
@@ -552,12 +528,10 @@ export default function AdminView() {
           detail={detail}
           saving={saving}
           connections={connections}
-          connectionsLoading={connectionsLoading}
           connectionsError={connectionsError}
           onBack={backToList}
           onDecide={decide}
           onDelete={deleteSubmission}
-          onRefreshConnections={refreshConnections}
         />
       ) : null}
     </AdminLayout>
