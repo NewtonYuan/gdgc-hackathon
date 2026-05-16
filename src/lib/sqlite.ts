@@ -2,15 +2,6 @@ import initSqlJs, { type Database, type SqlJsStatic, type SqlValue } from 'sql.j
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
 import type { RecordEntry } from '../components/DatabaseTab'
 
-const seedRows: RecordEntry[] = [
-  { name: 'Sarah Chen', role: 'Nurse', district: 'Sector 4', status: 'Verified' },
-  { name: 'Marcus Hale', role: 'Engineer', district: 'Sector 2', status: 'Missing' },
-  { name: 'Lina Torres', role: 'Security', district: '???', status: 'Corrupted' },
-  { name: 'James Rowe', role: 'Engineer', district: 'Sector 2', status: 'Verified' },
-  { name: 'Owen Liu', role: 'Security', district: 'Sector 2', status: 'Missing' },
-  { name: 'Petra Hale', role: 'Medic', district: 'Sector 3', status: 'Verified' },
-]
-
 let sqlJs: SqlJsStatic | null = null
 let db: Database | null = null
 
@@ -25,26 +16,13 @@ async function getDatabase(): Promise<Database> {
     })
   }
 
-  const nextDb = new sqlJs.Database()
-
-  nextDb.exec(`
-    CREATE TABLE records (
-      name TEXT PRIMARY KEY,
-      role TEXT NOT NULL,
-      district TEXT NOT NULL,
-      status TEXT NOT NULL
-    );
-  `)
-
-  const insertStmt = nextDb.prepare(
-    'INSERT INTO records (name, role, district, status) VALUES (?, ?, ?, ?);',
-  )
-
-  for (const row of seedRows) {
-    insertStmt.run([row.name, row.role, row.district, row.status])
+  const response = await fetch('/db/records.db')
+  if (!response.ok) {
+    throw new Error(`Unable to load database file: ${response.status}`)
   }
+  const bytes = new Uint8Array(await response.arrayBuffer())
+  const nextDb = new sqlJs.Database(bytes)
 
-  insertStmt.free()
   db = nextDb
   return nextDb
 }

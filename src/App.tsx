@@ -12,11 +12,72 @@ const incomingClaim = {
 }
 
 function App() {
+  const [started, setStarted] = useState(false)
   const [decision, setDecision] = useState<'VERIFY' | 'DENY' | null>(null)
   const [activeTab, setActiveTab] = useState<'database' | 'npc'>('database')
+  const [booting, setBooting] = useState(true)
+  const [bootProgress, setBootProgress] = useState(0)
   const [database, setDatabase] = useState<RecordEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!started) {
+      return
+    }
+
+    let cancelled = false
+    let timeoutId = 0
+
+    const tick = () => {
+      if (cancelled) {
+        return
+      }
+
+      setBootProgress((prev) => {
+        if (prev >= 100) {
+          return 100
+        }
+
+        const pauseChance = prev > 18 && prev < 92 ? 0.2 : 0.08
+        const shouldPause = Math.random() < pauseChance
+        const next = shouldPause
+          ? prev
+          : Math.min(
+              prev +
+                (prev < 35 ? 1.2 + Math.random() * 3.2 : prev < 75 ? 0.7 + Math.random() * 2.2 : 0.3 + Math.random() * 1.1),
+              100,
+            )
+
+        const delay = shouldPause
+          ? 380 + Math.random() * 700
+          : prev < 40
+            ? 170 + Math.random() * 200
+            : prev < 78
+              ? 230 + Math.random() * 310
+              : 320 + Math.random() * 420
+
+        if (next >= 100) {
+          window.setTimeout(() => {
+            if (!cancelled) {
+              setBooting(false)
+            }
+          }, 620)
+          return 100
+        }
+
+        timeoutId = window.setTimeout(tick, delay)
+        return next
+      })
+    }
+
+    timeoutId = window.setTimeout(tick, 260)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeoutId)
+    }
+  }, [started])
 
   useEffect(() => {
     let active = true
@@ -110,14 +171,37 @@ function App() {
     }
   }, [database])
 
+  if (!started) {
+    return (
+      <main className="boot-screen start-screen">
+        <div className="caution-tape tape-one" aria-hidden="true" />
+        <div className="caution-tape tape-two" aria-hidden="true" />
+        <button type="button" className="start-button" onClick={() => setStarted(true)}>
+          START
+        </button>
+      </main>
+    )
+  }
+
+  if (booting) {
+    return (
+      <main className="boot-screen" role="status" aria-live="polite">
+        <div className="boot-panel">
+          <p className="boot-label">Loading...</p>
+          <div className="boot-bar-track" aria-hidden="true">
+            <div className="boot-bar-fill" style={{ width: `${bootProgress}%` }} />
+          </div>
+        </div>
+      </main>
+    )
+  }
+
   return (
     <main className="terminal-shell">
       <div className="scanlines" aria-hidden="true" />
 
       <header className="topbar">
-        <p className="eyebrow">Recovered Government Terminal // Session 04</p>
-        <h1>VERIFY//DENY</h1>
-        <p className="tagline">The database remembers fragments. You decide what survives.</p>
+        <h1>VERIFIED</h1>
       </header>
 
       <div className="tabs" role="tablist" aria-label="Terminal panels">
