@@ -2,10 +2,10 @@ import { useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Line, OrbitControls, Stars, Text } from '@react-three/drei'
 import * as THREE from 'three'
-import { buildGraphFromRecords, type GraphNodeData, type RecordEntry } from '../lib/graphData'
+import type { GraphNodeData, GraphPayload } from '../lib/graphData'
 
 type GraphTabProps = {
-  database: RecordEntry[]
+  graph: GraphPayload
 }
 
 type PositionedNode = GraphNodeData & {
@@ -160,18 +160,19 @@ function SpaceNode({ node, onSelect }: SpaceNodeProps) {
         outlineWidth={0.018}
         outlineColor="#020612"
       >
-        {node.person.name}
+        {node.person.fullName}
       </Text>
     </group>
   )
 }
 
-type GraphSceneProps = GraphTabProps & {
+type GraphSceneProps = {
+  graph: GraphPayload
   onSelectNode: (node: GraphNodeData) => void
 }
 
-function GraphScene({ database, onSelectNode }: GraphSceneProps) {
-  const { nodes, edges } = useMemo(() => buildGraphFromRecords(database), [database])
+function GraphScene({ graph, onSelectNode }: GraphSceneProps) {
+  const { nodes, edges } = graph
   const positionedNodes = useMemo(() => buildNodePositions(nodes), [nodes])
   const positionById = useMemo(
     () => new Map(positionedNodes.map((node) => [node.id, node.position])),
@@ -227,11 +228,12 @@ function GraphScene({ database, onSelectNode }: GraphSceneProps) {
   )
 }
 
-function GraphTab({ database }: GraphTabProps) {
+function GraphTab({ graph }: GraphTabProps) {
   const [selectedNode, setSelectedNode] = useState<GraphNodeData | null>(null)
   const databaseSignature = useMemo(
-    () => database.map((row) => `${row.name}:${row.role}:${row.district}:${row.status}`).join('|'),
-    [database],
+    () =>
+      `${graph.nodes.map((node) => `${node.id}:${node.person.verificationStatus}:${node.person.trustScore}`).join('|')}::${graph.edges.map((edge) => `${edge.source}:${edge.target}:${edge.strength}`).join('|')}`,
+    [graph],
   )
 
   return (
@@ -267,34 +269,72 @@ function GraphTab({ database }: GraphTabProps) {
             style={{ width: '100%', height: '100%' }}
             onPointerMissed={() => setSelectedNode(null)}
           >
-            <GraphScene key={databaseSignature} database={database} onSelectNode={setSelectedNode} />
+            <GraphScene key={databaseSignature} graph={graph} onSelectNode={setSelectedNode} />
           </Canvas>
         </div>
 
         {selectedNode ? (
           <aside className="graph-inspector" aria-label="Selected person details">
             <p className={`graph-status-pill ${selectedNode.statusBucket}`}>
-              {selectedNode.person.graphStatus.replace('-', ' ')}
+              {selectedNode.person.verificationStatus.replace('-', ' ')}
             </p>
             <h3 className="graph-person-code">{selectedNode.shortLabel}</h3>
-            <p className="graph-person-name">{selectedNode.person.name}</p>
+            <p className="graph-person-name">{selectedNode.person.fullName}</p>
 
             <dl className="graph-person-meta">
               <div>
-                <dt>Role</dt>
-                <dd>{selectedNode.person.role}</dd>
+                <dt>Age</dt>
+                <dd>{selectedNode.person.age}</dd>
               </div>
               <div>
-                <dt>District</dt>
-                <dd>{selectedNode.person.district}</dd>
+                <dt>Gender</dt>
+                <dd>{selectedNode.person.gender}</dd>
               </div>
               <div>
                 <dt>Status</dt>
-                <dd>{selectedNode.person.status}</dd>
+                <dd>{selectedNode.person.verificationStatus}</dd>
               </div>
               <div>
+                <dt>Trust Score</dt>
+                <dd>{selectedNode.person.trustScore}</dd>
+              </div>
+              <div>
+                <dt>Address</dt>
+                <dd>{`${selectedNode.person.street}, ${selectedNode.person.city}, ${selectedNode.person.country}`}</dd>
+              </div>
+              <div>
+                <dt>Occupation Type</dt>
+                <dd>{selectedNode.person.occupationType}</dd>
+              </div>
+              {selectedNode.person.employment ? (
+                <div>
+                  <dt>Employment</dt>
+                  <dd>
+                    {selectedNode.person.employment.jobTitle}
+                    <br />
+                    {selectedNode.person.employment.employer}
+                  </dd>
+                </div>
+              ) : null}
+              {selectedNode.person.student ? (
+                <div>
+                  <dt>Student</dt>
+                  <dd>
+                    {selectedNode.person.student.institution}
+                    <br />
+                    {selectedNode.person.student.fieldOfStudy}
+                  </dd>
+                </div>
+              ) : null}
+              {selectedNode.person.retired ? (
+                <div>
+                  <dt>Former Occupation</dt>
+                  <dd>{selectedNode.person.retired.formerOccupation ?? 'Unknown'}</dd>
+                </div>
+              ) : null}
+              <div>
                 <dt>Database Object</dt>
-                <dd>{`{ name: "${selectedNode.person.name}", role: "${selectedNode.person.role}", district: "${selectedNode.person.district}", status: "${selectedNode.person.status}" }`}</dd>
+                <dd>{JSON.stringify(selectedNode.person)}</dd>
               </div>
             </dl>
           </aside>
@@ -303,13 +343,13 @@ function GraphTab({ database }: GraphTabProps) {
 
       <div className="graph-notes">
         <p>
-          <span>Node rule</span> 3D spheres represent people from the database.
+          <span>Node rule</span> 3D spheres represent citizens loaded from `verify_deny.db`.
         </p>
         <p>
-          <span>Color rule</span> Verified records glow green, unresolved records glow amber, corrupted records glow red.
+          <span>Color rule</span> Colors come from each citizen's `verification_status`.
         </p>
         <p>
-          <span>Connection rule</span> Role, district, and status overlap increase line thickness.
+          <span>Connection rule</span> Line thickness comes from `connections.strength` in the database.
         </p>
         <p>
           <span>Inspector rule</span> Click a node to open the sidebar. Click empty space to close it.
