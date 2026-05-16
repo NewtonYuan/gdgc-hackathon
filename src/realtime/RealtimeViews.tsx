@@ -871,9 +871,9 @@ export function PhoneRealtimeView() {
           />
           <span>Back</span>
         </button>
-        <p className="tagline phone-connection">{connectionLabel}</p>
         {!result ? (
           <>
+            <p className="tagline phone-connection">{connectionLabel}</p>
             <div className="phone-icon-ring">•</div>
             <h1 className="phone-title">Tap Card</h1>
             <p className="tagline phone-subtitle">
@@ -893,22 +893,13 @@ export function PhoneRealtimeView() {
                   ? "…"
                   : "✕"}
             </div>
-            <h1 className="phone-title">
+            <h1 className="phone-title">{result.name}</h1>
+            <p className="phone-subtitle">
               {result.status === "VERIFIED"
-                ? "Verified"
+                ? resultOccupation || "Unknown"
                 : result.status === "PENDING"
                   ? "Pending"
                   : "Invalid"}
-            </h1>
-            <p className="phone-subtitle">
-              {result.status === "VERIFIED"
-                ? `${result.name} is verified.`
-                : result.status === "PENDING"
-                  ? `${result.name} is still pending review.`
-                  : `${result.name} is invalid.`}
-            </p>
-            <p className="phone-subtitle">
-              Occupation: {resultOccupation || "Unknown"}
             </p>
           </>
         )}
