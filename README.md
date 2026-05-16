@@ -1,212 +1,119 @@
-# VERIFY//DENY
+# Project Name：VERIFY
 
-> “When records die, trust becomes law.”
+A post-collapse identity verification prototype that uses NFC cards, local records, and human review to rebuild trust after all centralized digital records are lost.
 
-A narrative deduction game inspired by _Papers, Please_ set in a post-blackout society where all digital records have been corrupted.
 
----
+## Overview
 
-## Premise
+`VERIFY` is a hackathon project set in a world where a solar flare has destroyed the digital systems. 
 
-A catastrophic blackout has destroyed most centralized digital infrastructure.
+To solve the collapse of trust after centralized identity systems failed, the project explores a human-centered verification workflow.
 
-Governments collapsed overnight.  
-Hospitals lost patient records.  
-Identity systems vanished.  
-Employment databases became corrupted.
+- citizens submit identity details and supporting documents
+- the system writes a portable NFC identity payload
+- admins review submissions and assign a decision
+- a checker device scans the card and receives a live verification result
+- a relationship graph helps operators inspect trust signals inside the recovered citizen dataset
 
-You are one of the last remaining **Digital Records Officers** operating a partially recovered government terminal.
+It normally proves identity, ownership, and authority.
 
-People arrive one by one claiming:
-
-- identities
-- professions
-- access rights
-- ownership
-- authority
-
-Using fragmented records and previous testimonies, you must decide:
-
-## VERIFY or DENY
-
----
-
-## Core Gameplay Loop
-
-1. Read surviving database fragments
-2. Analyze the NPC’s claim
-3. Compare contradictions and evidence
-4. Choose:
-   - ✅ VERIFY
-   - ❌ DENY
-5. Gain new information if correct
-6. Use that information for future decisions
-
-Each verified person expands the surviving database.
-
-Each mistake destabilizes society further.
-
----
-## Game Flow
-SETUP PHASE
-└── Player receives initial corrupted db
-    (some fields present, some missing, some unverified)
-
-─────────────────────────────────────────
-
-PERSON ARRIVES
-└── Player sees person's claim card
-    (what they say about themselves)
-
-─────────────────────────────────────────
-
-PLAYER DECISION POINT
-├── ACCEPT
-│   ├── Cross-check passed, person is verified
-│   ├── Their info is written into db as trusted
-│   └── They feed you new info about other people
-│       └── Those claims sit as "unverified" in db
-│           until those people show up
-│
-├── QUESTION
-│   ├── Player picks from fixed question set
-│   ├── Person answers
-│   ├── Player manually cross-checks answer against db
-│   └── Loop back to DECISION POINT
-│       (player can question multiple times before deciding)
-│
-└── DECLINE
-    ├── Person is rejected
-    ├── NO info added to db
-    └── Move to next person
-
-─────────────────────────────────────────
-
-NEXT PERSON ARRIVES
-└── Repeat loop
-
----
-## Features
-
-- Sequential deduction gameplay
-- Branching information chains
-- Corrupted database system
-- Escalating ambiguity
-- Narrative consequences
-- Retro CRT-inspired interface
-- Black + dark red dystopian aesthetic
-
----
-
-## Example Scenario
-
-### Database Snapshot
-
-| Name        | Role     | District | Status    |
-| ----------- | -------- | -------- | --------- |
-| Sarah Chen  | Nurse    | Sector 4 | Verified  |
-| Marcus Hale | Engineer | Sector 2 | Missing   |
-| Lina Torres | Security | ???      | Corrupted |
-
----
-
-### Incoming NPC
-
-> “I’m Marcus Hale. Power engineer from Sector 2.”
-
-The player must determine:
-
-- Does the database support this?
-- Are there contradictions?
-- Is he trustworthy?
-
----
-
-## Visual Direction
-
-The game uses:
-
-- black backgrounds
-- dark red highlights
-- CRT terminal effects
-- corrupted UI elements
-- glitch overlays
-- low-light dystopian styling
-
-Inspired by:
-
-- _Papers, Please_
-- _Do Not Feed the Monkeys_
-- _Beholder_
-- retro government terminals
-
----
 
 ## Tech Stack
 
-- React
+- React 19
 - TypeScript
-- Tailwind CSS
 - Vite
+- Express
+- WebSocket (`ws`)
+- `sql.js`
+- React Three Fiber
+- Drei
+- Three.js
+- Tailwind CSS v4
+- Multer
 
----
+## Installation
 
-## Team Goal
+### Prerequisites
 
-Build a short but highly immersive narrative deduction experience suitable for a 4-minute hackathon presentation.
+- Node.js 18+ recommended
+- npm
 
-The focus is:
-
-- atmosphere
-- tension
-- deduction
-- player trust decisions
-
----
-
-## Theme Alignment
-
-The game explores:
-
-- Identity without records
-- Trust without institutions
-- Society after digital collapse
-- Human verification replacing centralized systems
-
-Feature to implement:
-- When a new NPC arrives, it also shows the people from the database that show the best match. (e.g. they could be at the same place and department at work or live on the same street).
-
----
-
-## Running Locally
+### Steps
 
 ```bash
 npm install
 npm run dev
 ```
 
----
+This starts:
 
-## Styling Notes
+- the Express server for APIs and WebSocket communication
+- the Vite development server for the frontend
 
-Primary palette:
+### *Build for production
 
-- Background: near-black
-- Accent: dark crimson red
-- Text: muted gray
-- Warning states: bright red
+```bash
+npm run build
+```
 
-Recommended Tailwind tones:
+### *Preview the production build
 
-- `bg-zinc-950`
-- `bg-black`
-- `text-zinc-300`
-- `text-red-700`
-- `border-red-900`
+```bash
+npm run preview
+```
 
----
+### Main routes
 
-## Tagline
+- `/` - landing page
+- `/upload` - applicant upload and NFC write flow
+- `/admin` - admin submissions dashboard
+- `/desktop` - desktop verifier view
+- `/checker` - phone checker view
+- `/admin/graph` - 3D verified citizen relationship graph
 
-> “The database remembers fragments.  
-> You decide what survives.”
+## Project Structure
+
+```text
+gdgc-hackathon/
++-- data/
+|   +-- data.py                # Seed script for verify_deny.db
+|   +-- records.db             # Submission storage
+|   `-- verify_deny.db         # Preloaded citizen and connection database
++-- preloaded_information/
+|   +-- data.json
+|   `-- nfc_readme.md
++-- public/
+|   +-- favicon.svg
+|   `-- icons/
++-- src/
+|   +-- components/
+|   |   `-- GraphTab.tsx
+|   +-- lib/
+|   |   `-- graphData.ts
+|   +-- realtime/
+|   |   +-- AdminGraphView.tsx
+|   |   +-- AdminLayout.tsx
+|   |   +-- AdminSubmissionOverview.tsx
+|   |   +-- AdminView.tsx
+|   |   +-- CitizensView.tsx
+|   |   +-- DesktopAdminView.tsx
+|   |   +-- RealtimeViews.tsx
+|   |   `-- UploadView.tsx
+|   +-- App.tsx
+|   +-- App.css
+|   +-- index.css
+|   `-- main.tsx
++-- server.mjs                # Express API, uploads, graph API, WebSocket server
++-- package.json
+`-- README.md
+```
+
+## How It Work
+
+
+## Notes
+
+- The project is designed as a prototype for a hackathon scenario, so some flows are intentionally narrative-driven and optimized for demo value.
+- Web NFC support is limited and typically works best on Android Chrome-compatible devices.
+
