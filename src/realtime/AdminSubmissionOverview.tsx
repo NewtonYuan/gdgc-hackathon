@@ -195,7 +195,9 @@ export default function AdminSubmissionOverview({
   }, [detail.cardPayload]);
 
   const address = typeof parsedPayload.address === "string" ? parsedPayload.address : "-";
-  const pid = typeof parsedPayload.pid === "string" ? parsedPayload.pid : "-";
+  const trustScore = Math.max(0, Math.min(100, Math.round(detail.trustScore)));
+  const trustColorClass =
+    trustScore >= 80 ? "text-[#22c55e]" : trustScore >= 50 ? "text-[#f59e0b]" : "text-[#ef4444]";
   const documents = parseDocuments(detail.documentPath);
 
   const rankedConnections = useMemo(() => {
@@ -234,8 +236,8 @@ export default function AdminSubmissionOverview({
             <p className="mt-2 text-lg font-bold">{address}</p>
           </div>
           <div className="bg-transparent p-3">
-            <span>P-ID:</span>
-            <p className="mt-2 text-lg font-bold">{pid}</p>
+            <span>Trust score:</span>
+            <p className={`mt-2 text-lg font-bold ${trustColorClass}`}>{trustScore}/100</p>
           </div>
           <div className="bg-transparent p-3">
             <span>Card ID:</span>

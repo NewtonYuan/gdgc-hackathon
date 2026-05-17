@@ -788,11 +788,13 @@ app.get('/api/admin/submissions/:id', async (req, res) => {
     }
     const row = stmt.get()
     stmt.free()
+    const realtimeTrustScores = calculateRealtimeTrustScores()
+    const citizenId = String(row[0])
     const submission = {
       ...mapSubmissionRow(row),
       age: row[11] == null ? null : Number(row[11]),
       gender: row[12] == null ? null : String(row[12]),
-      trustScore: Number(row[13] ?? 0),
+      trustScore: realtimeTrustScores.get(citizenId) ?? Number(row[13] ?? 0),
       employment: row[14]
         ? {
             jobTitle: String(row[14]),
