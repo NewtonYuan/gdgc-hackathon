@@ -615,6 +615,18 @@ function statusLabel(statusBucket: GraphNodeData['statusBucket']) {
   return 'verified'
 }
 
+function trustScoreTone(score: number) {
+  if (score >= 80) {
+    return 'high'
+  }
+
+  if (score >= 60) {
+    return 'medium'
+  }
+
+  return 'low'
+}
+
 function DetailRow({ label, value }: { label: string; value: string | number | null | undefined }) {
   const isEmpty = value === null || value === undefined || value === ''
 
@@ -1768,6 +1780,23 @@ function GraphTab({ graph, initialFocusNodeId }: GraphTabProps) {
               </button>
 
               <dl className="graph-person-meta">
+                <div className="graph-person-trust-row">
+                  <dt>Trust Score</dt>
+                  <dd>
+                    <span
+                      className={`graph-trust-light ${trustScoreTone(visibleSidebarNode.person.trustScore)}`}
+                      aria-label={`Trust score ${trustScoreTone(visibleSidebarNode.person.trustScore)}`}
+                      title={
+                        visibleSidebarNode.person.trustScore >= 80
+                          ? 'High trust'
+                          : visibleSidebarNode.person.trustScore >= 60
+                            ? 'Medium trust'
+                          : 'Low trust'
+                      }
+                    />
+                    <span>{visibleSidebarNode.person.trustScore}</span>
+                  </dd>
+                </div>
                 <div>
                   <dt>Age</dt>
                   <dd>{visibleSidebarNode.person.age}</dd>
@@ -1779,10 +1808,6 @@ function GraphTab({ graph, initialFocusNodeId }: GraphTabProps) {
                 <div>
                   <dt>Status</dt>
                   <dd>{visibleSidebarNode.person.verificationStatus}</dd>
-                </div>
-                <div>
-                  <dt>Trust Score</dt>
-                  <dd>{visibleSidebarNode.person.trustScore}</dd>
                 </div>
                 <div>
                   <dt>Address</dt>
